@@ -28,6 +28,8 @@ import {
   Loader2,
   Package,
   LogIn,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 /* =========================================================
@@ -41,6 +43,7 @@ const API_URL =
 const TOKEN_KEY = "auctionbd_token";
 const USER_KEY = "auctionbd_user";
 const FAVORITES_KEY = "auctionbd_favorites";
+const THEME_KEY = "auctionbd_theme";
 
 const FALLBACK_IMAGE =
   "https://placehold.co/800x800/f8fafc/f59e0b?text=Auction+BD";
@@ -121,10 +124,13 @@ async function api(path, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  const response = await fetch(
+    `${API_URL}${path}`,
+    {
+      ...options,
+      headers,
+    }
+  );
 
   const text = await response.text();
 
@@ -139,10 +145,24 @@ async function api(path, options = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(
+    let message =
       data?.message ||
-        `Server returned ${response.status}`
-    );
+      data?.error ||
+      `Server returned ${response.status}`;
+
+    if (response.status === 404) {
+      message =
+        data?.message ||
+        `API endpoint not found: ${path}. Make sure your backend is running and this route exists.`;
+    }
+
+    if (response.status === 401) {
+      message =
+        data?.message ||
+        "Your login session is invalid or expired.";
+    }
+
+    throw new Error(message);
   }
 
   return data;
@@ -174,27 +194,31 @@ function statusInfo(status) {
   if (status === "sold") {
     return {
       label: "SOLD",
-      color: "bg-emerald-500 text-white",
+      color:
+        "bg-emerald-500 text-white",
     };
   }
 
   if (status === "ended") {
     return {
       label: "ENDED",
-      color: "bg-slate-600 text-white",
+      color:
+        "bg-slate-600 text-white",
     };
   }
 
   if (status === "cancelled") {
     return {
       label: "CANCELLED",
-      color: "bg-red-600 text-white",
+      color:
+        "bg-red-600 text-white",
     };
   }
 
   return {
     label: "LIVE",
-    color: "bg-red-500 text-white",
+    color:
+      "bg-red-500 text-white",
   };
 }
 
@@ -202,7 +226,7 @@ function statusInfo(status) {
    GLOBAL STYLES
 ========================================================= */
 
-function GlobalStyles() {
+function GlobalStyles({ dark }) {
   return (
     <style>{`
       * {
@@ -215,33 +239,47 @@ function GlobalStyles() {
 
       body {
         margin: 0;
-        background: #ffffff;
-        color: #111827;
+        transition:
+          background-color .2s ease,
+          color .2s ease;
       }
 
       .field {
         width: 100%;
         border-radius: 12px;
-        border: 1px solid #e5e7eb;
-        background: #ffffff;
+        border: 1px solid ${
+          dark ? "#334155" : "#e5e7eb"
+        };
+        background: ${
+          dark ? "#0f172a" : "#ffffff"
+        };
         padding: 13px 15px;
         outline: none;
-        color: #111827;
+        color: ${
+          dark ? "#f8fafc" : "#111827"
+        };
         transition: .2s ease;
       }
 
       .field:focus {
         border-color: #f59e0b;
-        box-shadow: 0 0 0 3px rgba(245,158,11,.12);
+        box-shadow:
+          0 0 0 3px rgba(245,158,11,.12);
       }
 
       .field::placeholder {
-        color: #9ca3af;
+        color: ${
+          dark ? "#64748b" : "#9ca3af"
+        };
       }
 
       select option {
-        background: #ffffff;
-        color: #111827;
+        background: ${
+          dark ? "#0f172a" : "#ffffff"
+        };
+        color: ${
+          dark ? "#f8fafc" : "#111827"
+        };
       }
 
       input,
@@ -263,16 +301,22 @@ function AuctionCard({
   favorite,
   onOpen,
   onFavorite,
+  dark,
 }) {
   const status = statusInfo(auction.status);
-  const active = auction.status === "active";
+  const active =
+    auction.status === "active";
 
   return (
     <article
       onClick={() => onOpen(auction)}
-      className="group cursor-pointer overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-orange-300 hover:shadow-lg"
+      className={`group cursor-pointer overflow-hidden rounded-2xl border shadow-sm transition hover:-translate-y-1 hover:border-orange-400 hover:shadow-lg ${
+        dark
+          ? "border-slate-800 bg-slate-900"
+          : "border-gray-200 bg-white"
+      }`}
     >
-      <div className="relative aspect-square overflow-hidden bg-gray-100">
+      <div className="relative aspect-[4/3] overflow-hidden">
         <img
           src={
             auction.image ||
@@ -312,9 +356,11 @@ function AuctionCard({
             event.stopPropagation();
             onFavorite(auction.id);
           }}
-          className={`absolute right-3 top-3 rounded-full p-2 shadow ${
+          className={`absolute right-3 top-3 rounded-full p-2 shadow transition ${
             favorite
               ? "bg-orange-500 text-white"
+              : dark
+              ? "bg-slate-900/95 text-white"
               : "bg-white/95 text-gray-700"
           }`}
         >
@@ -335,14 +381,26 @@ function AuctionCard({
             "Auction"}
         </p>
 
-        <h3 className="mt-2 line-clamp-2 text-lg font-bold text-gray-900">
+        <h3
+          className={`mt-2 line-clamp-2 text-lg font-bold ${
+            dark
+              ? "text-white"
+              : "text-gray-900"
+          }`}
+        >
           {auction.title ||
             "Untitled Auction"}
         </h3>
 
         <div className="mt-5 flex justify-between gap-4">
           <div>
-            <p className="text-xs text-gray-500">
+            <p
+              className={`text-xs ${
+                dark
+                  ? "text-slate-500"
+                  : "text-gray-500"
+              }`}
+            >
               {auction.status ===
               "sold"
                 ? "Sold for"
@@ -352,24 +410,54 @@ function AuctionCard({
                 : "Current bid"}
             </p>
 
-            <p className="text-xl font-black text-gray-900">
+            <p
+              className={`text-xl font-black ${
+                dark
+                  ? "text-white"
+                  : "text-gray-900"
+              }`}
+            >
               {money(auction.price)}
             </p>
           </div>
 
           <div className="text-right">
-            <p className="text-xs text-gray-500">
+            <p
+              className={`text-xs ${
+                dark
+                  ? "text-slate-500"
+                  : "text-gray-500"
+              }`}
+            >
               Bids
             </p>
 
-            <p className="font-semibold text-gray-900">
+            <p
+              className={`font-semibold ${
+                dark
+                  ? "text-white"
+                  : "text-gray-900"
+              }`}
+            >
               {auction.bids}
             </p>
           </div>
         </div>
 
-        <div className="mt-4 flex justify-between border-t border-gray-100 pt-4 text-xs">
-          <span className="flex items-center gap-1 text-gray-500">
+        <div
+          className={`mt-4 flex justify-between border-t pt-4 text-xs ${
+            dark
+              ? "border-slate-800"
+              : "border-gray-100"
+          }`}
+        >
+          <span
+            className={`flex items-center gap-1 ${
+              dark
+                ? "text-slate-500"
+                : "text-gray-500"
+            }`}
+          >
             <Clock3 size={14} />
             {auction.time ||
               status.label}
@@ -379,6 +467,8 @@ function AuctionCard({
             className={
               active
                 ? "font-bold text-orange-500"
+                : dark
+                ? "font-bold text-slate-600"
                 : "font-bold text-gray-400"
             }
           >
@@ -396,20 +486,56 @@ function AuctionCard({
    SKELETON
 ========================================================= */
 
-function Skeleton() {
+function Skeleton({ dark }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-      <div className="aspect-square animate-pulse bg-gray-100" />
+    <div
+      className={`overflow-hidden rounded-2xl border ${
+        dark
+          ? "border-slate-800 bg-slate-900"
+          : "border-gray-200 bg-white"
+      }`}
+    >
+      <div
+        className={`aspect-[4/3] animate-pulse ${
+          dark
+            ? "bg-slate-800"
+            : "bg-gray-200"
+        }`}
+      />
 
       <div className="space-y-4 p-5">
-        <div className="h-3 w-20 animate-pulse rounded bg-gray-200" />
+        <div
+          className={`h-3 w-20 animate-pulse rounded ${
+            dark
+              ? "bg-slate-800"
+              : "bg-gray-200"
+          }`}
+        />
 
-        <div className="h-6 w-3/4 animate-pulse rounded bg-gray-200" />
+        <div
+          className={`h-6 w-3/4 animate-pulse rounded ${
+            dark
+              ? "bg-slate-800"
+              : "bg-gray-200"
+          }`}
+        />
 
         <div className="flex justify-between">
-          <div className="h-6 w-24 animate-pulse rounded bg-gray-200" />
+          <div
+            className={`h-6 w-24 animate-pulse rounded ${
+              dark
+                ? "bg-slate-800"
+                : "bg-gray-200"
+            }`}
+          />
 
-          <div className="h-6 w-10 animate-pulse rounded bg-gray-200" />
+          <div
+            className={`h-6 w-10 animate-pulse rounded ${
+              dark
+                ? "bg-slate-800"
+                : "bg-gray-200"
+            }`}
+          />
         </div>
       </div>
     </div>
@@ -424,6 +550,7 @@ function AuthModal({
   mode = "login",
   onClose,
   onSuccess,
+  dark,
 }) {
   const [loginMode, setLoginMode] =
     useState(mode !== "register");
@@ -440,10 +567,16 @@ function AuthModal({
   const [password, setPassword] =
     useState("");
 
+  const [confirmPassword, setConfirmPassword] =
+    useState("");
+
   const [loading, setLoading] =
     useState(false);
 
   const [error, setError] =
+    useState("");
+
+  const [success, setSuccess] =
     useState("");
 
   useEffect(() => {
@@ -479,23 +612,60 @@ function AuthModal({
     event.preventDefault();
 
     setError("");
+    setSuccess("");
+
+    const cleanName = name.trim();
+    const cleanEmail =
+      email.trim().toLowerCase();
+    const cleanPhone = phone.trim();
+
+    if (!loginMode) {
+      if (cleanName.length < 2) {
+        setError(
+          "Please enter your full name."
+        );
+        return;
+      }
+
+      if (password.length < 6) {
+        setError(
+          "Password must be at least 6 characters."
+        );
+        return;
+      }
+
+      if (
+        password !== confirmPassword
+      ) {
+        setError(
+          "Passwords do not match."
+        );
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
+      /*
+       * IMPORTANT:
+       * These are the actual auth endpoints.
+       */
       const path = loginMode
         ? "/api/auth/login"
         : "/api/auth/register";
 
       const body = loginMode
         ? {
-            email: email.trim(),
+            email: cleanEmail,
             password,
           }
         : {
-            name: name.trim(),
-            email: email.trim(),
-            phone: phone.trim(),
+            name: cleanName,
+            email: cleanEmail,
+            phone: cleanPhone,
             password,
+            confirmPassword,
           };
 
       const data = await api(path, {
@@ -508,21 +678,42 @@ function AuthModal({
         data?.accessToken ||
         data?.user?.token;
 
-      if (!token) {
-        throw new Error(
-          "Login succeeded, but the server did not return a login token."
-        );
-      }
-
       const loggedUser =
         data?.user ||
         data?.account ||
         null;
 
+      /*
+       * Some backends register the account
+       * but do not automatically log the user in.
+       */
+      if (!token) {
+        if (!loginMode) {
+          setSuccess(
+            "Account created successfully. Please sign in."
+          );
+
+          setLoginMode(true);
+          setPassword("");
+          setConfirmPassword("");
+          return;
+        }
+
+        throw new Error(
+          "Login succeeded, but the server did not return a login token."
+        );
+      }
+
       saveAuth(token, loggedUser);
 
       const finalUser =
         loggedUser || getSavedUser();
+
+      setSuccess(
+        loginMode
+          ? "Signed in successfully."
+          : "Account created successfully."
+      );
 
       onSuccess(finalUser);
     } catch (err) {
@@ -552,8 +743,13 @@ function AuthModal({
         }
       }}
     >
-      <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
-        {/* ORANGE TOP BAR */}
+      <div
+        className={`relative w-full max-w-md overflow-hidden rounded-3xl shadow-2xl ${
+          dark
+            ? "bg-slate-900"
+            : "bg-white"
+        }`}
+      >
         <div className="h-1.5 bg-orange-500" />
 
         <div className="p-6 sm:p-8">
@@ -565,7 +761,13 @@ function AuthModal({
                 </div>
 
                 <div>
-                  <p className="text-lg font-black text-gray-900">
+                  <p
+                    className={`text-lg font-black ${
+                      dark
+                        ? "text-white"
+                        : "text-gray-900"
+                    }`}
+                  >
                     AUCTION
                     <span className="text-orange-500">
                       BD
@@ -578,13 +780,25 @@ function AuthModal({
                 </div>
               </div>
 
-              <h2 className="mt-7 text-2xl font-black text-gray-900">
+              <h2
+                className={`mt-7 text-2xl font-black ${
+                  dark
+                    ? "text-white"
+                    : "text-gray-900"
+                }`}
+              >
                 {loginMode
                   ? "Welcome back"
                   : "Create your account"}
               </h2>
 
-              <p className="mt-2 text-sm leading-6 text-gray-600">
+              <p
+                className={`mt-2 text-sm leading-6 ${
+                  dark
+                    ? "text-slate-400"
+                    : "text-gray-600"
+                }`}
+              >
                 {loginMode
                   ? "Sign in to place bids, save auctions and sell your items."
                   : "Join AuctionBD and start buying or selling today."}
@@ -594,20 +808,47 @@ function AuthModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+              className={`rounded-full p-2 transition ${
+                dark
+                  ? "text-slate-400 hover:bg-slate-800 hover:text-white"
+                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+              }`}
             >
               <X size={20} />
             </button>
           </div>
 
           {error && (
-            <div className="mt-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <div
+              className={`mt-5 flex items-start gap-3 rounded-xl border p-4 text-sm ${
+                dark
+                  ? "border-red-400/20 bg-red-400/10 text-red-300"
+                  : "border-red-200 bg-red-50 text-red-700"
+              }`}
+            >
               <AlertCircle
                 size={18}
                 className="mt-0.5 shrink-0"
               />
 
               <span>{error}</span>
+            </div>
+          )}
+
+          {success && (
+            <div
+              className={`mt-5 flex items-start gap-3 rounded-xl border p-4 text-sm ${
+                dark
+                  ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
+              <CheckCircle2
+                size={18}
+                className="mt-0.5 shrink-0"
+              />
+
+              <span>{success}</span>
             </div>
           )}
 
@@ -618,7 +859,13 @@ function AuthModal({
             {!loginMode && (
               <>
                 <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                  <label
+                    className={`mb-1.5 block text-sm font-semibold ${
+                      dark
+                        ? "text-slate-300"
+                        : "text-gray-700"
+                    }`}
+                  >
                     Full name
                   </label>
 
@@ -636,7 +883,13 @@ function AuthModal({
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                  <label
+                    className={`mb-1.5 block text-sm font-semibold ${
+                      dark
+                        ? "text-slate-300"
+                        : "text-gray-700"
+                    }`}
+                  >
                     Phone number
                   </label>
 
@@ -655,7 +908,13 @@ function AuthModal({
             )}
 
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+              <label
+                className={`mb-1.5 block text-sm font-semibold ${
+                  dark
+                    ? "text-slate-300"
+                    : "text-gray-700"
+                }`}
+              >
                 Email address
               </label>
 
@@ -675,7 +934,13 @@ function AuthModal({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+              <label
+                className={`mb-1.5 block text-sm font-semibold ${
+                  dark
+                    ? "text-slate-300"
+                    : "text-gray-700"
+                }`}
+              >
                 Password
               </label>
 
@@ -698,6 +963,37 @@ function AuthModal({
                 className="field"
               />
             </div>
+
+            {!loginMode && (
+              <div>
+                <label
+                  className={`mb-1.5 block text-sm font-semibold ${
+                    dark
+                      ? "text-slate-300"
+                      : "text-gray-700"
+                  }`}
+                >
+                  Confirm password
+                </label>
+
+                <input
+                  required
+                  minLength={6}
+                  type="password"
+                  value={
+                    confirmPassword
+                  }
+                  onChange={(event) =>
+                    setConfirmPassword(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Enter your password again"
+                  autoComplete="new-password"
+                  className="field"
+                />
+              </div>
+            )}
 
             <button
               type="submit"
@@ -728,11 +1024,25 @@ function AuthModal({
           </form>
 
           <div className="my-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-gray-200" />
+            <div
+              className={`h-px flex-1 ${
+                dark
+                  ? "bg-slate-800"
+                  : "bg-gray-200"
+              }`}
+            />
+
             <span className="text-xs text-gray-400">
               AUCTIONBD
             </span>
-            <div className="h-px flex-1 bg-gray-200" />
+
+            <div
+              className={`h-px flex-1 ${
+                dark
+                  ? "bg-slate-800"
+                  : "bg-gray-200"
+              }`}
+            />
           </div>
 
           <button
@@ -741,10 +1051,14 @@ function AuthModal({
               setLoginMode(
                 (current) => !current
               );
-
               setError("");
+              setSuccess("");
             }}
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"
+            className={`w-full rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+              dark
+                ? "border-slate-700 text-slate-300 hover:border-orange-400 hover:bg-orange-400/10 hover:text-orange-400"
+                : "border-gray-200 text-gray-700 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"
+            }`}
           >
             {loginMode
               ? "Don't have an account? Create one"
@@ -764,6 +1078,7 @@ function SellerPage({
   user,
   onBack,
   onLogin,
+  dark,
 }) {
   const [form, setForm] =
     useState({
@@ -913,13 +1228,11 @@ function SellerPage({
       setVideos([]);
 
       if (imageInput.current) {
-        imageInput.current.value =
-          "";
+        imageInput.current.value = "";
       }
 
       if (videoInput.current) {
-        videoInput.current.value =
-          "";
+        videoInput.current.value = "";
       }
 
       await loadRequests();
@@ -929,15 +1242,15 @@ function SellerPage({
         err
       );
 
-      const message =
+      const text =
         err?.message?.toLowerCase() ||
         "";
 
       if (
-        message.includes("login") ||
-        message.includes("session") ||
-        message.includes("token") ||
-        message.includes("unauthorized")
+        text.includes("login") ||
+        text.includes("session") ||
+        text.includes("token") ||
+        text.includes("unauthorized")
       ) {
         clearAuth();
         onLogin();
@@ -952,27 +1265,47 @@ function SellerPage({
     }
   };
 
+  const panel = dark
+    ? "border-slate-800 bg-slate-900"
+    : "border-gray-200 bg-white";
+
+  const heading = dark
+    ? "text-white"
+    : "text-gray-900";
+
+  const muted = dark
+    ? "text-slate-400"
+    : "text-gray-500";
+
   if (!user && !getToken()) {
     return (
       <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
         <button
           onClick={onBack}
-          className="mb-8 flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900"
+          className={`mb-7 text-sm ${
+            dark
+              ? "text-slate-400"
+              : "text-gray-500"
+          }`}
         >
           ← Back to auctions
         </button>
 
-        <div className="rounded-3xl border border-gray-200 bg-white p-10 text-center shadow-sm">
+        <div
+          className={`rounded-3xl border p-10 text-center shadow-sm ${panel}`}
+        >
           <User
             size={45}
             className="mx-auto text-orange-500"
           />
 
-          <h1 className="mt-5 text-3xl font-black text-gray-900">
+          <h1
+            className={`mt-5 text-3xl font-black ${heading}`}
+          >
             Login required
           </h1>
 
-          <p className="mt-3 text-gray-500">
+          <p className={`mt-3 ${muted}`}>
             Create an account or sign in
             before listing your item.
           </p>
@@ -992,7 +1325,11 @@ function SellerPage({
     <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <button
         onClick={onBack}
-        className="mb-8 flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900"
+        className={`mb-7 text-sm ${
+          dark
+            ? "text-slate-400 hover:text-white"
+            : "text-gray-500 hover:text-gray-900"
+        }`}
       >
         ← Back to auctions
       </button>
@@ -1004,11 +1341,13 @@ function SellerPage({
               SELL ON AUCTIONBD
             </p>
 
-            <h1 className="mt-2 text-4xl font-black text-gray-900">
+            <h1
+              className={`mt-2 text-4xl font-black ${heading}`}
+            >
               List your item
             </h1>
 
-            <p className="mt-3 text-gray-500">
+            <p className={`mt-3 ${muted}`}>
               Upload photos, provide the
               details and submit your item
               for review.
@@ -1016,30 +1355,40 @@ function SellerPage({
           </div>
 
           {message && (
-            <div className="mb-6 flex gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
+            <div
+              className={`mb-6 flex gap-3 rounded-2xl border p-4 ${
+                dark
+                  ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+              }`}
+            >
               <CheckCircle2
                 size={20}
                 className="shrink-0"
               />
-
               <span>{message}</span>
             </div>
           )}
 
           {error && (
-            <div className="mb-6 flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
+            <div
+              className={`mb-6 flex gap-3 rounded-2xl border p-4 ${
+                dark
+                  ? "border-red-400/20 bg-red-400/10 text-red-300"
+                  : "border-red-200 bg-red-50 text-red-700"
+              }`}
+            >
               <AlertCircle
                 size={20}
                 className="shrink-0"
               />
-
               <span>{error}</span>
             </div>
           )}
 
           <form
             onSubmit={submit}
-            className="space-y-5 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm"
+            className={`space-y-5 rounded-3xl border p-6 shadow-sm ${panel}`}
           >
             <input
               required
@@ -1170,10 +1519,10 @@ function SellerPage({
               className="field resize-none"
             />
 
-            {/* PHOTOS */}
-
             <div>
-              <p className="mb-2 font-bold text-gray-900">
+              <p
+                className={`mb-2 font-bold ${heading}`}
+              >
                 Photos *
               </p>
 
@@ -1182,7 +1531,11 @@ function SellerPage({
                 onClick={() =>
                   imageInput.current?.click()
                 }
-                className="flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 p-8 text-gray-500 transition hover:border-orange-400 hover:bg-orange-50 hover:text-orange-500"
+                className={`flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 transition ${
+                  dark
+                    ? "border-slate-700 bg-slate-950 text-slate-400 hover:border-orange-400 hover:bg-orange-400/10 hover:text-orange-400"
+                    : "border-gray-300 bg-gray-50 text-gray-500 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-500"
+                }`}
               >
                 <Upload size={22} />
                 Choose photos from your phone
@@ -1215,10 +1568,10 @@ function SellerPage({
               )}
             </div>
 
-            {/* VIDEO */}
-
             <div>
-              <p className="mb-2 font-bold text-gray-900">
+              <p
+                className={`mb-2 font-bold ${heading}`}
+              >
                 Video{" "}
                 <span className="font-normal text-gray-400">
                   (optional)
@@ -1230,7 +1583,11 @@ function SellerPage({
                 onClick={() =>
                   videoInput.current?.click()
                 }
-                className="flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 p-6 text-gray-500 transition hover:border-orange-400 hover:bg-orange-50 hover:text-orange-500"
+                className={`flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 transition ${
+                  dark
+                    ? "border-slate-700 bg-slate-950 text-slate-400 hover:border-orange-400 hover:bg-orange-400/10 hover:text-orange-400"
+                    : "border-gray-300 bg-gray-50 text-gray-500 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-500"
+                }`}
               >
                 <Upload size={20} />
                 Choose video
@@ -1253,7 +1610,7 @@ function SellerPage({
               />
 
               {videos.length > 0 && (
-                <p className="mt-2 text-sm text-gray-500">
+                <p className={`mt-2 text-sm ${muted}`}>
                   {videos.length} video
                   {videos.length === 1
                     ? ""
@@ -1283,8 +1640,12 @@ function SellerPage({
         </section>
 
         <aside>
-          <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm lg:sticky lg:top-24">
-            <h2 className="text-xl font-bold text-gray-900">
+          <div
+            className={`rounded-3xl border p-6 shadow-sm lg:sticky lg:top-24 ${panel}`}
+          >
+            <h2
+              className={`text-xl font-bold ${heading}`}
+            >
               Your requests
             </h2>
 
@@ -1292,14 +1653,14 @@ function SellerPage({
               <div className="mt-6 flex justify-center">
                 <Loader2 className="animate-spin text-orange-500" />
               </div>
-            ) : requests.length ===
-              0 ? (
-              <div className="mt-8 text-center text-sm text-gray-500">
+            ) : requests.length === 0 ? (
+              <div
+                className={`mt-8 text-center text-sm ${muted}`}
+              >
                 <Package
                   size={35}
                   className="mx-auto mb-3 text-gray-300"
                 />
-
                 No requests yet.
               </div>
             ) : (
@@ -1311,9 +1672,15 @@ function SellerPage({
                         request._id ||
                         request.id
                       }
-                      className="rounded-xl border border-gray-200 p-4"
+                      className={`rounded-xl border p-4 ${
+                        dark
+                          ? "border-slate-800"
+                          : "border-gray-200"
+                      }`}
                     >
-                      <p className="font-bold text-gray-900">
+                      <p
+                        className={`font-bold ${heading}`}
+                      >
                         {request.title}
                       </p>
 
@@ -1328,7 +1695,7 @@ function SellerPage({
                       </p>
 
                       {request.rejectionReason && (
-                        <p className="mt-2 text-xs text-red-600">
+                        <p className="mt-2 text-xs text-red-500">
                           {
                             request.rejectionReason
                           }
@@ -1336,7 +1703,9 @@ function SellerPage({
                       )}
 
                       {request.adminNotes && (
-                        <p className="mt-2 text-xs text-gray-500">
+                        <p
+                          className={`mt-2 text-xs ${muted}`}
+                        >
                           {
                             request.adminNotes
                           }
@@ -1386,6 +1755,28 @@ function AuctionHome() {
   const [error, setError] =
     useState("");
 
+  const [dark, setDark] =
+    useState(() => {
+      try {
+        const saved =
+          localStorage.getItem(
+            THEME_KEY
+          );
+
+        if (saved === "dark")
+          return true;
+
+        if (saved === "light")
+          return false;
+
+        return window.matchMedia?.(
+          "(prefers-color-scheme: dark)"
+        ).matches || false;
+      } catch {
+        return false;
+      }
+    });
+
   const [favorites, setFavorites] =
     useState(() => {
       try {
@@ -1400,6 +1791,28 @@ function AuctionHome() {
     });
 
   /* =======================================================
+     THEME
+  ======================================================= */
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        THEME_KEY,
+        dark ? "dark" : "light"
+      );
+    } catch {}
+
+    document.documentElement.style.colorScheme =
+      dark ? "dark" : "light";
+
+    document.body.style.backgroundColor =
+      dark ? "#020617" : "#ffffff";
+
+    document.body.style.color =
+      dark ? "#f8fafc" : "#111827";
+  }, [dark]);
+
+  /* =======================================================
      LOAD AUCTIONS
   ======================================================= */
 
@@ -1409,29 +1822,13 @@ function AuctionHome() {
         setLoading(true);
         setError("");
 
-        const response =
-          await fetch(
-            `${API_URL}/api/auctions?status=all`,
-            {
-              headers: {
-                Accept:
-                  "application/json",
-              },
-              cache: "no-store",
-            }
-          );
-
-        const data =
-          await response
-            .json()
-            .catch(() => ({}));
-
-        if (!response.ok) {
-          throw new Error(
-            data?.message ||
-              `Server returned ${response.status}`
-          );
-        }
+        const data = await api(
+          "/api/auctions?status=all",
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
 
         const list =
           Array.isArray(data)
@@ -1552,7 +1949,6 @@ function AuctionHome() {
       newUser || getSavedUser();
 
     setUser(saved);
-
     setAuthMode(null);
   };
 
@@ -1562,7 +1958,6 @@ function AuctionHome() {
 
   const logout = () => {
     clearAuth();
-
     setUser(null);
     setPage("home");
     setSelectedAuction(null);
@@ -1592,7 +1987,13 @@ function AuctionHome() {
 
   if (selectedAuction) {
     return (
-      <div className="min-h-screen bg-white text-gray-900">
+      <div
+        className={
+          dark
+            ? "min-h-screen bg-slate-950 text-white"
+            : "min-h-screen bg-white text-gray-900"
+        }
+      >
         <AuctionDetails
           auction={selectedAuction}
           onBack={() => {
@@ -1613,8 +2014,33 @@ function AuctionHome() {
             onSuccess={
               handleAuthSuccess
             }
+            dark={dark}
           />
         )}
+
+        {/* Theme button on details page */}
+        <button
+          type="button"
+          onClick={() =>
+            setDark((value) => !value)
+          }
+          title={
+            dark
+              ? "Switch to light mode"
+              : "Switch to dark mode"
+          }
+          className={`fixed right-4 top-4 z-[100] flex h-11 w-11 items-center justify-center rounded-full border shadow-lg backdrop-blur ${
+            dark
+              ? "border-slate-700 bg-slate-900 text-amber-400"
+              : "border-gray-200 bg-white text-slate-700"
+          }`}
+        >
+          {dark ? (
+            <Sun size={19} />
+          ) : (
+            <Moon size={19} />
+          )}
+        </button>
       </div>
     );
   }
@@ -1625,16 +2051,32 @@ function AuctionHome() {
 
   if (page === "seller") {
     return (
-      <div className="min-h-screen bg-gray-50 text-gray-900">
-        <GlobalStyles />
+      <div
+        className={`min-h-screen ${
+          dark
+            ? "bg-slate-950 text-white"
+            : "bg-white text-gray-900"
+        }`}
+      >
+        <GlobalStyles dark={dark} />
 
-        <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
+        <header
+          className={`sticky top-0 z-40 border-b backdrop-blur ${
+            dark
+              ? "border-slate-800 bg-slate-950/95"
+              : "border-gray-200 bg-white/95"
+          }`}
+        >
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
             <button
               onClick={() =>
                 setPage("home")
               }
-              className="text-xl font-black text-gray-900"
+              className={`text-xl font-black ${
+                dark
+                  ? "text-white"
+                  : "text-gray-900"
+              }`}
             >
               AUCTION
               <span className="text-orange-500">
@@ -1642,16 +2084,42 @@ function AuctionHome() {
               </span>
             </button>
 
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900"
-            >
-              <LogOut size={17} />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setDark(
+                    (value) => !value
+                  )
+                }
+                className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+                  dark
+                    ? "border-slate-700 bg-slate-900 text-amber-400"
+                    : "border-gray-200 bg-white text-slate-700"
+                }`}
+              >
+                {dark ? (
+                  <Sun size={18} />
+                ) : (
+                  <Moon size={18} />
+                )}
+              </button>
 
-              <span className="hidden sm:inline">
-                Logout
-              </span>
-            </button>
+              <button
+                onClick={logout}
+                className={`flex items-center gap-2 text-sm ${
+                  dark
+                    ? "text-slate-400 hover:text-white"
+                    : "text-gray-500 hover:text-gray-900"
+                }`}
+              >
+                <LogOut size={17} />
+
+                <span className="hidden sm:inline">
+                  Logout
+                </span>
+              </button>
+            </div>
           </div>
         </header>
 
@@ -1663,6 +2131,7 @@ function AuctionHome() {
           onLogin={() =>
             setAuthMode("login")
           }
+          dark={dark}
         />
 
         {authMode && (
@@ -1674,6 +2143,7 @@ function AuctionHome() {
             onSuccess={
               handleAuthSuccess
             }
+            dark={dark}
           />
         )}
       </div>
@@ -1685,12 +2155,24 @@ function AuctionHome() {
   ======================================================= */
 
   return (
-    <div className="min-h-screen bg-white text-gray-900">
-      <GlobalStyles />
+    <div
+      className={`min-h-screen transition-colors duration-200 ${
+        dark
+          ? "bg-slate-950 text-white"
+          : "bg-white text-gray-900"
+      }`}
+    >
+      <GlobalStyles dark={dark} />
 
       {/* HEADER */}
 
-      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
+      <header
+        className={`sticky top-0 z-40 border-b backdrop-blur ${
+          dark
+            ? "border-slate-800 bg-slate-950/95"
+            : "border-gray-200 bg-white/95"
+        }`}
+      >
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-4">
           {/* LOGO */}
 
@@ -1708,7 +2190,13 @@ function AuctionHome() {
             </div>
 
             <div className="text-left">
-              <h1 className="text-lg font-black sm:text-xl">
+              <h1
+                className={`text-lg font-black sm:text-xl ${
+                  dark
+                    ? "text-white"
+                    : "text-gray-900"
+                }`}
+              >
                 AUCTION
                 <span className="text-orange-500">
                   BD
@@ -1744,7 +2232,11 @@ function AuctionHome() {
                   onClick={() =>
                     scrollTo(id)
                   }
-                  className="text-sm font-medium text-gray-500 transition hover:text-orange-500"
+                  className={`text-sm font-medium transition ${
+                    dark
+                      ? "text-slate-400 hover:text-orange-400"
+                      : "text-gray-500 hover:text-orange-500"
+                  }`}
                 >
                   {name}
                 </button>
@@ -1752,9 +2244,36 @@ function AuctionHome() {
             )}
           </nav>
 
-          {/* AUTH */}
+          {/* RIGHT SIDE */}
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* THEME */}
+
+            <button
+              type="button"
+              onClick={() =>
+                setDark(
+                  (value) => !value
+                )
+              }
+              title={
+                dark
+                  ? "Switch to light mode"
+                  : "Switch to dark mode"
+              }
+              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition sm:h-10 sm:w-10 ${
+                dark
+                  ? "border-slate-700 bg-slate-900 text-amber-400 hover:bg-slate-800"
+                  : "border-gray-200 bg-white text-slate-700 hover:bg-gray-50"
+              }`}
+            >
+              {dark ? (
+                <Sun size={18} />
+              ) : (
+                <Moon size={18} />
+              )}
+            </button>
+
             {user ? (
               <>
                 <button
@@ -1766,7 +2285,11 @@ function AuctionHome() {
 
                 <button
                   onClick={logout}
-                  className="rounded-lg bg-gray-100 p-2 text-gray-600 transition hover:bg-gray-200"
+                  className={`rounded-lg p-2 transition ${
+                    dark
+                      ? "bg-slate-900 text-slate-300 hover:bg-slate-800"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
                   title="Logout"
                 >
                   <LogOut size={18} />
@@ -1780,7 +2303,11 @@ function AuctionHome() {
                       "login"
                     )
                   }
-                  className="rounded-lg px-2.5 py-2 text-xs font-semibold text-gray-700 transition hover:bg-orange-50 hover:text-orange-500 sm:px-3 sm:text-sm"
+                  className={`rounded-lg px-2.5 py-2 text-xs font-semibold transition sm:px-3 sm:text-sm ${
+                    dark
+                      ? "text-slate-300 hover:bg-orange-400/10 hover:text-orange-400"
+                      : "text-gray-700 hover:bg-orange-50 hover:text-orange-500"
+                  }`}
                 >
                   Sign In
                 </button>
@@ -1812,11 +2339,23 @@ function AuctionHome() {
 
       <section className="mx-auto max-w-7xl px-6 py-16 sm:py-20">
         <div className="max-w-3xl">
-          <div className="mb-5 inline-flex rounded-full bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-500">
+          <div
+            className={`mb-5 inline-flex rounded-full px-4 py-2 text-sm font-semibold ${
+              dark
+                ? "bg-orange-400/10 text-orange-400"
+                : "bg-orange-50 text-orange-500"
+            }`}
+          >
             🔥 Live auctions happening now
           </div>
 
-          <h2 className="text-5xl font-black tracking-tight text-gray-900 sm:text-6xl">
+          <h2
+            className={`text-5xl font-black tracking-tight sm:text-6xl ${
+              dark
+                ? "text-white"
+                : "text-gray-900"
+            }`}
+          >
             Find it.
             <br />
 
@@ -1829,7 +2368,13 @@ function AuctionHome() {
             Make it yours.
           </h2>
 
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-gray-500">
+          <p
+            className={`mt-5 max-w-2xl text-lg leading-8 ${
+              dark
+                ? "text-slate-400"
+                : "text-gray-500"
+            }`}
+          >
             Bangladesh&apos;s digital
             auction marketplace.
             Discover products and win
@@ -1851,7 +2396,13 @@ function AuctionHome() {
       {/* SEARCH */}
 
       <section className="mx-auto max-w-7xl px-6">
-        <div className="flex rounded-2xl border border-gray-200 bg-white p-2 shadow-sm sm:p-3">
+        <div
+          className={`flex rounded-2xl border p-2 shadow-sm sm:p-3 ${
+            dark
+              ? "border-slate-800 bg-slate-900"
+              : "border-gray-200 bg-white"
+          }`}
+        >
           <div className="flex flex-1 items-center gap-3 px-3">
             <Search
               size={20}
@@ -1866,7 +2417,11 @@ function AuctionHome() {
                 )
               }
               placeholder="Search auctions..."
-              className="w-full bg-transparent py-2 text-gray-900 outline-none placeholder:text-gray-400"
+              className={`w-full bg-transparent py-2 outline-none ${
+                dark
+                  ? "text-white placeholder:text-slate-600"
+                  : "text-gray-900 placeholder:text-gray-400"
+              }`}
             />
 
             {search && (
@@ -1884,7 +2439,11 @@ function AuctionHome() {
           <button
             onClick={loadAuctions}
             disabled={loading}
-            className="rounded-xl p-3 text-gray-400 transition hover:bg-gray-100 hover:text-gray-900"
+            className={`rounded-xl p-3 transition ${
+              dark
+                ? "text-slate-500 hover:bg-slate-800 hover:text-white"
+                : "text-gray-400 hover:bg-gray-100 hover:text-gray-900"
+            }`}
             title="Refresh"
           >
             <RefreshCw
@@ -1906,12 +2465,24 @@ function AuctionHome() {
         className="mx-auto max-w-7xl scroll-mt-24 px-6 py-16"
       >
         <div className="mb-8">
-          <h3 className="text-3xl font-bold text-gray-900">
+          <h3
+            className={`text-3xl font-bold ${
+              dark
+                ? "text-white"
+                : "text-gray-900"
+            }`}
+          >
             Auctions
           </h3>
 
           {!loading && !error && (
-            <p className="mt-1 text-sm text-gray-500">
+            <p
+              className={`mt-1 text-sm ${
+                dark
+                  ? "text-slate-500"
+                  : "text-gray-500"
+              }`}
+            >
               {filteredAuctions.length}{" "}
               auction
               {filteredAuctions.length ===
@@ -1929,6 +2500,7 @@ function AuctionHome() {
               (item) => (
                 <Skeleton
                   key={item}
+                  dark={dark}
                 />
               )
             )}
@@ -1936,8 +2508,20 @@ function AuctionHome() {
         )}
 
         {error && !loading && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-10 text-center">
-            <p className="text-red-600">
+          <div
+            className={`rounded-2xl border p-10 text-center ${
+              dark
+                ? "border-red-400/20 bg-red-400/10"
+                : "border-red-200 bg-red-50"
+            }`}
+          >
+            <p
+              className={
+                dark
+                  ? "text-red-300"
+                  : "text-red-600"
+              }
+            >
               {error}
             </p>
 
@@ -1954,17 +2538,35 @@ function AuctionHome() {
           !error &&
           filteredAuctions.length ===
             0 && (
-            <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center">
+            <div
+              className={`rounded-2xl border p-12 text-center ${
+                dark
+                  ? "border-slate-800 bg-slate-900"
+                  : "border-gray-200 bg-white"
+              }`}
+            >
               <Search
                 size={36}
                 className="mx-auto text-gray-300"
               />
 
-              <h4 className="mt-4 text-xl font-bold text-gray-900">
+              <h4
+                className={`mt-4 text-xl font-bold ${
+                  dark
+                    ? "text-white"
+                    : "text-gray-900"
+                }`}
+              >
                 No auctions found
               </h4>
 
-              <p className="mt-2 text-gray-500">
+              <p
+                className={`mt-2 ${
+                  dark
+                    ? "text-slate-500"
+                    : "text-gray-500"
+                }`}
+              >
                 Try another search or
                 category.
               </p>
@@ -1972,9 +2574,7 @@ function AuctionHome() {
               <button
                 onClick={() => {
                   setSearch("");
-                  setCategory(
-                    "All"
-                  );
+                  setCategory("All");
                 }}
                 className="mt-5 rounded-lg bg-orange-500 px-5 py-2 font-bold text-white hover:bg-orange-600"
               >
@@ -1991,12 +2591,8 @@ function AuctionHome() {
               {filteredAuctions.map(
                 (auction) => (
                   <AuctionCard
-                    key={
-                      auction.id
-                    }
-                    auction={
-                      auction
-                    }
+                    key={auction.id}
+                    auction={auction}
                     favorite={favorites.includes(
                       auction.id
                     )}
@@ -2006,6 +2602,7 @@ function AuctionHome() {
                     onFavorite={
                       toggleFavorite
                     }
+                    dark={dark}
                   />
                 )
               )}
@@ -2017,10 +2614,20 @@ function AuctionHome() {
 
       <section
         id="categories"
-        className="border-y border-gray-200 bg-gray-50"
+        className={
+          dark
+            ? "border-y border-slate-800 bg-slate-900/50"
+            : "border-y border-gray-200 bg-gray-50"
+        }
       >
         <div className="mx-auto max-w-7xl px-6 py-16">
-          <h3 className="text-3xl font-bold text-gray-900">
+          <h3
+            className={`text-3xl font-bold ${
+              dark
+                ? "text-white"
+                : "text-gray-900"
+            }`}
+          >
             Categories
           </h3>
 
@@ -2030,17 +2637,16 @@ function AuctionHome() {
                 <button
                   key={item}
                   onClick={() => {
-                    setCategory(
-                      item
-                    );
-
+                    setCategory(item);
                     scrollTo(
                       "auctions"
                     );
                   }}
                   className={`rounded-xl border px-4 py-4 font-medium transition ${
                     category === item
-                      ? "border-orange-500 bg-orange-50 text-orange-500"
+                      ? "border-orange-500 bg-orange-500/10 text-orange-500"
+                      : dark
+                      ? "border-slate-700 bg-slate-900 text-slate-300 hover:border-orange-400 hover:text-orange-400"
                       : "border-gray-200 bg-white text-gray-700 hover:border-orange-300 hover:text-orange-500"
                   }`}
                 >
@@ -2058,7 +2664,13 @@ function AuctionHome() {
         id="how"
         className="mx-auto max-w-7xl px-6 py-20"
       >
-        <h3 className="text-center text-3xl font-bold text-gray-900">
+        <h3
+          className={`text-center text-3xl font-bold ${
+            dark
+              ? "text-white"
+              : "text-gray-900"
+          }`}
+        >
           How Auction BD Works
         </h3>
 
@@ -2087,17 +2699,33 @@ function AuctionHome() {
             ]) => (
               <div
                 key={title}
-                className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm"
+                className={`rounded-2xl border p-8 shadow-sm ${
+                  dark
+                    ? "border-slate-800 bg-slate-900"
+                    : "border-gray-200 bg-white"
+                }`}
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-50 text-orange-500">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-500/10 text-orange-500">
                   <Icon size={23} />
                 </div>
 
-                <h4 className="mt-5 text-xl font-bold text-gray-900">
+                <h4
+                  className={`mt-5 text-xl font-bold ${
+                    dark
+                      ? "text-white"
+                      : "text-gray-900"
+                  }`}
+                >
                   {title}
                 </h4>
 
-                <p className="mt-2 leading-6 text-gray-500">
+                <p
+                  className={`mt-2 leading-6 ${
+                    dark
+                      ? "text-slate-400"
+                      : "text-gray-500"
+                  }`}
+                >
                   {description}
                 </p>
               </div>
@@ -2135,20 +2763,36 @@ function AuctionHome() {
 
       {/* FOOTER */}
 
-      <footer className="border-t border-gray-200 px-6 py-8">
+      <footer
+        className={`border-t px-6 py-8 ${
+          dark
+            ? "border-slate-800"
+            : "border-gray-200"
+        }`}
+      >
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-5 sm:flex-row">
-          <b className="text-gray-900">
+          <b
+            className={
+              dark
+                ? "text-white"
+                : "text-gray-900"
+            }
+          >
             AUCTION
             <span className="text-orange-500">
               BD
             </span>
           </b>
 
-          <div className="flex gap-5 text-xs text-gray-500">
+          <div
+            className={`flex gap-5 text-xs ${
+              dark
+                ? "text-slate-500"
+                : "text-gray-500"
+            }`}
+          >
             <span className="flex items-center gap-1">
-              <ShieldCheck
-                size={14}
-              />
+              <ShieldCheck size={14} />
               Verified
             </span>
 
@@ -2165,7 +2809,7 @@ function AuctionHome() {
         </div>
       </footer>
 
-      {/* AUTH MODAL */}
+      {/* AUTH */}
 
       {authMode && (
         <AuthModal
@@ -2176,6 +2820,7 @@ function AuctionHome() {
           onSuccess={
             handleAuthSuccess
           }
+          dark={dark}
         />
       )}
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Gavel,
@@ -10,6 +10,10 @@ import {
   AlertCircle,
   Loader2,
   LogIn,
+  Sun,
+  Moon,
+  MapPin,
+  Tag,
 } from "lucide-react";
 
 const API_URL =
@@ -18,39 +22,81 @@ const API_URL =
 
 const TOKEN_KEY = "auctionbd_token";
 const USER_KEY = "auctionbd_user";
+const THEME_KEY = "auctionbd_theme";
 
 const FALLBACK_IMAGE =
-  "https://placehold.co/800x800/f8fafc/f97316?text=Auction+BD";
+  "https://placehold.co/900x900/f8fafc/f97316?text=Auction+BD";
 
 const money = (value = 0) =>
-  `৳${Number(value).toLocaleString("en-BD")}`;
+  `৳${Number(value || 0).toLocaleString("en-BD")}`;
 
 function getAuth() {
   try {
-    const token = localStorage.getItem(TOKEN_KEY);
-    const user = JSON.parse(
-      localStorage.getItem(USER_KEY) || "null"
-    );
-
-    return { token, user };
+    return {
+      token: localStorage.getItem(TOKEN_KEY) || "",
+      user: JSON.parse(
+        localStorage.getItem(USER_KEY) || "null"
+      ),
+    };
   } catch {
-    return { token: null, user: null };
+    return { token: "", user: null };
   }
 }
 
 function clearAuth() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  } catch {}
 }
 
-function AuctionDetails({ auction, onBack, onLogin }) {
-  const [auctionData, setAuctionData] = useState(auction || null);
+function getInitialTheme() {
+  try {
+    return (
+      localStorage.getItem(THEME_KEY) ||
+      (window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light")
+    );
+  } catch {
+    return "light";
+  }
+}
+
+function applyTheme(theme) {
+  document.documentElement.classList.toggle(
+    "dark",
+    theme === "dark"
+  );
+
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {}
+}
+
+/* =========================================================
+   MAIN
+========================================================= */
+
+function AuctionDetails({
+  auction,
+  onBack,
+  onLogin,
+}) {
+  const [auctionData, setAuctionData] = useState(
+    auction || null
+  );
+
   const [bidHistory, setBidHistory] = useState([]);
   const [bidAmount, setBidAmount] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [placingBid, setPlacingBid] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const [theme, setTheme] = useState(getInitialTheme);
 
   const auctionId =
     auctionData?._id || auctionData?.id;
@@ -68,6 +114,41 @@ function AuctionDetails({ auction, onBack, onLogin }) {
     "ended",
     "cancelled",
   ].includes(status);
+
+  const images = useMemo(() => {
+    const list = [];
+
+    if (auctionData?.image) {
+      list.push(auctionData.image);
+    }
+
+    if (Array.isArray(auctionData?.images)) {
+      list.push(...auctionData.images);
+    }
+
+    return [...new Set(list.filter(Boolean))];
+  }, [auctionData]);
+
+  const [selectedImage, setSelectedImage] =
+    useState(0);
+
+  /* =======================================================
+     THEME
+  ======================================================= */
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((current) =>
+      current === "dark" ? "light" : "dark"
+    );
+  };
+
+  /* =======================================================
+     LOAD AUCTION
+  ======================================================= */
 
   async function loadAuction() {
     if (!auctionId) {
@@ -97,18 +178,22 @@ function AuctionDetails({ auction, onBack, onLogin }) {
       if (!response.ok) {
         throw new Error(
           data?.message ||
-            "Failed to load auction."
+            `Failed to load auction (${response.status}).`
         );
       }
 
-      setAuctionData({
+      const normalized = {
         ...data,
-        id: data._id || data.id,
-      });
+        id: data?._id || data?.id,
+      };
+
+      setAuctionData(normalized);
 
       setBidHistory(
-        Array.isArray(data.bidHistory)
+        Array.isArray(data?.bidHistory)
           ? data.bidHistory
+          : Array.isArray(data?.bidsHistory)
+          ? data.bidsHistory
           : []
       );
     } catch (err) {
@@ -118,7 +203,7 @@ function AuctionDetails({ auction, onBack, onLogin }) {
       );
 
       setError(
-        err.message ||
+        err?.message ||
           "Unable to load auction details."
       );
     } finally {
@@ -128,7 +213,11 @@ function AuctionDetails({ auction, onBack, onLogin }) {
 
   useEffect(() => {
     loadAuction();
-  }, [auction?._id, auction?.id]);
+  }, [auction?.id, auction?._id]);
+
+  /* =======================================================
+     PLACE BID
+  ======================================================= */
 
   async function handleBid(event) {
     event.preventDefault();
@@ -138,20 +227,8 @@ function AuctionDetails({ auction, onBack, onLogin }) {
 
     const { token, user } = getAuth();
 
-    /*
-     * IMPORTANT:
-     * Always check localStorage here instead of
-     * relying on stale React state.
-     */
     if (!token || !user) {
-      if (typeof onLogin === "function") {
-        onLogin();
-      } else {
-        setError(
-          "Please sign in before placing a bid."
-        );
-      }
-
+      onLogin?.();
       return;
     }
 
@@ -205,21 +282,18 @@ function AuctionDetails({ auction, onBack, onLogin }) {
           "Your login session expired. Please sign in again."
         );
 
-        if (typeof onLogin === "function") {
-          onLogin();
-        }
-
+        onLogin?.();
         return;
       }
 
       if (!response.ok) {
         throw new Error(
           data?.message ||
-            "Failed to place bid."
+            `Failed to place bid (${response.status}).`
         );
       }
 
-      if (data.auction) {
+      if (data?.auction) {
         setAuctionData({
           ...data.auction,
           id:
@@ -228,27 +302,27 @@ function AuctionDetails({ auction, onBack, onLogin }) {
         });
       }
 
-      if (data.bid) {
+      if (data?.bid) {
         setBidHistory((current) => [
           data.bid,
           ...current,
         ]);
-      } else {
-        await loadAuction();
       }
 
       setBidAmount("");
+
       setSuccess(
         "Your bid was placed successfully!"
       );
+
+      if (!data?.auction && !data?.bid) {
+        await loadAuction();
+      }
     } catch (err) {
-      console.error(
-        "Bid error:",
-        err
-      );
+      console.error("Bid error:", err);
 
       setError(
-        err.message ||
+        err?.message ||
           "Unable to place your bid."
       );
     } finally {
@@ -256,168 +330,227 @@ function AuctionDetails({ auction, onBack, onLogin }) {
     }
   }
 
+  /* =======================================================
+     LOADING
+  ======================================================= */
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white">
-        <div className="flex min-h-screen items-center justify-center">
-          <Loader2
-            size={35}
-            className="animate-spin text-orange-500"
-          />
-        </div>
+      <div className="min-h-screen bg-white text-gray-900 transition-colors dark:bg-slate-950 dark:text-white">
+        <DetailsHeader
+          theme={theme}
+          toggleTheme={toggleTheme}
+          onBack={onBack}
+        />
+
+        <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
+          <div className="grid gap-8 lg:grid-cols-2">
+            <div className="aspect-square animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5" />
+
+            <div className="space-y-5">
+              <div className="h-5 w-24 animate-pulse rounded bg-gray-100 dark:bg-white/5" />
+
+              <div className="h-12 w-3/4 animate-pulse rounded bg-gray-100 dark:bg-white/5" />
+
+              <div className="h-24 animate-pulse rounded-2xl bg-gray-100 dark:bg-white/5" />
+
+              <div className="h-32 animate-pulse rounded-2xl bg-gray-100 dark:bg-white/5" />
+
+              <div className="h-48 animate-pulse rounded-2xl bg-gray-100 dark:bg-white/5" />
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
+
+  /* =======================================================
+     ERROR
+  ======================================================= */
 
   if (error && !auctionData?.title) {
     return (
-      <div className="min-h-screen bg-slate-950 px-6 text-white">
-        <div className="mx-auto flex min-h-screen max-w-xl items-center justify-center text-center">
-          <div>
+      <div className="min-h-screen bg-white text-gray-900 transition-colors dark:bg-slate-950 dark:text-white">
+        <DetailsHeader
+          theme={theme}
+          toggleTheme={toggleTheme}
+          onBack={onBack}
+        />
+
+        <main className="mx-auto flex min-h-[70vh] max-w-2xl items-center justify-center px-4">
+          <div className="w-full rounded-3xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-500/20 dark:bg-red-500/5">
             <AlertCircle
-              size={45}
-              className="mx-auto text-red-400"
+              size={42}
+              className="mx-auto text-red-500"
             />
 
-            <h2 className="mt-4 text-xl font-bold">
+            <h2 className="mt-5 text-2xl font-black">
               Unable to load auction
             </h2>
 
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-3 text-sm text-gray-500 dark:text-slate-400">
               {error}
             </p>
 
-            <button
-              type="button"
-              onClick={onBack}
-              className="mt-6 rounded-xl bg-orange-500 px-5 py-3 font-bold text-white transition hover:bg-orange-600"
-            >
-              Back to auctions
-            </button>
+            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={loadAuction}
+                className="rounded-xl bg-orange-500 px-6 py-3 font-bold text-white transition hover:bg-orange-600"
+              >
+                Try Again
+              </button>
+
+              <button
+                type="button"
+                onClick={onBack}
+                className="rounded-xl border border-gray-200 px-6 py-3 font-bold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
+              >
+                Back to auctions
+              </button>
+            </div>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
 
+  const mainImage =
+    images[selectedImage] ||
+    images[0] ||
+    FALLBACK_IMAGE;
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      {/* HEADER */}
+    <div className="min-h-screen bg-white text-gray-900 transition-colors dark:bg-slate-950 dark:text-white">
+      <DetailsHeader
+        theme={theme}
+        toggleTheme={toggleTheme}
+        onBack={onBack}
+      />
 
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex items-center gap-2"
-          >
-            <Gavel
-              size={22}
-              className="text-orange-500"
-            />
+      <main className="mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-10">
+        {/* BACK */}
 
-            <div className="text-left">
-              <p className="font-black">
-                AUCTION
-                <span className="text-orange-500">
-                  BD
-                </span>
-              </p>
-
-              <p className="hidden text-[9px] tracking-[.2em] text-slate-500 sm:block">
-                BID. WIN. OWN.
-              </p>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-sm text-slate-400 transition hover:text-white"
-          >
-            Back to auctions
-          </button>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
         <button
           type="button"
           onClick={onBack}
-          className="mb-7 flex items-center gap-2 text-sm text-slate-400 transition hover:text-orange-500"
+          className="mb-7 flex items-center gap-2 text-sm font-semibold text-gray-500 transition hover:text-orange-500 dark:text-slate-400"
         >
-          <ArrowLeft size={16} />
-          Back to Live Auctions
+          <ArrowLeft size={17} />
+          Back to auctions
         </button>
 
-        <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
-          {/* IMAGE */}
+        <div className="grid gap-8 lg:grid-cols-[1.08fr_.92fr]">
+          {/* =================================================
+              IMAGES
+          ================================================= */}
 
-          <div className="overflow-hidden rounded-3xl border border-white/10 bg-white">
-            <div className="relative aspect-square sm:aspect-[4/3]">
-              <img
-                src={
-                  auctionData?.image ||
-                  FALLBACK_IMAGE
-                }
-                alt={
-                  auctionData?.title ||
-                  "Auction item"
-                }
-                className="h-full w-full object-cover"
-                onError={(event) => {
-                  event.currentTarget.src =
-                    FALLBACK_IMAGE;
-                }}
-              />
-
-              <div
-                className={`absolute left-4 top-4 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-white ${
-                  closed
-                    ? "bg-slate-700"
-                    : "bg-orange-500"
-                }`}
-              >
-                <span
-                  className={`h-2 w-2 rounded-full bg-white ${
-                    !closed
-                      ? "animate-pulse"
-                      : ""
-                  }`}
+          <section>
+            <div className="overflow-hidden rounded-3xl border border-gray-200 bg-gray-50 shadow-sm dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="relative aspect-square sm:aspect-[4/3]">
+                <img
+                  src={mainImage}
+                  alt={
+                    auctionData?.title ||
+                    "Auction item"
+                  }
+                  className="h-full w-full object-contain"
+                  onError={(event) => {
+                    event.currentTarget.src =
+                      FALLBACK_IMAGE;
+                  }}
                 />
 
-                {status === "sold"
-                  ? "SOLD"
-                  : status === "ended"
-                  ? "AUCTION ENDED"
-                  : status === "cancelled"
-                  ? "CANCELLED"
-                  : "LIVE AUCTION"}
+                <div
+                  className={`absolute left-4 top-4 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-black shadow-lg ${
+                    closed
+                      ? "bg-gray-800 text-white dark:bg-slate-700"
+                      : "bg-orange-500 text-white"
+                  }`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full bg-white ${
+                      !closed
+                        ? "animate-pulse"
+                        : ""
+                    }`}
+                  />
+
+                  {status === "sold"
+                    ? "SOLD"
+                    : status === "ended"
+                    ? "AUCTION ENDED"
+                    : status === "cancelled"
+                    ? "CANCELLED"
+                    : "LIVE AUCTION"}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* DETAILS */}
+            {images.length > 1 && (
+              <div className="mt-3 grid grid-cols-5 gap-3">
+                {images.slice(0, 5).map(
+                  (image, index) => (
+                    <button
+                      key={`${image}-${index}`}
+                      type="button"
+                      onClick={() =>
+                        setSelectedImage(index)
+                      }
+                      className={`aspect-square overflow-hidden rounded-xl border-2 transition ${
+                        selectedImage === index
+                          ? "border-orange-500"
+                          : "border-gray-200 dark:border-white/10"
+                      }`}
+                    >
+                      <img
+                        src={image}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        onError={(event) => {
+                          event.currentTarget.src =
+                            FALLBACK_IMAGE;
+                        }}
+                      />
+                    </button>
+                  )
+                )}
+              </div>
+            )}
+          </section>
 
-          <div>
-            <p className="text-sm font-bold text-orange-500">
-              {auctionData?.category ||
-                "Auction"}
-            </p>
+          {/* =================================================
+              DETAILS
+          ================================================= */}
 
-            <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
-              {auctionData?.title}
+          <section>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-600 dark:bg-orange-500/10 dark:text-orange-400">
+                {auctionData?.category ||
+                  "Auction"}
+              </span>
+
+              {auctionData?.condition && (
+                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-white/5 dark:text-slate-400">
+                  {auctionData.condition}
+                </span>
+              )}
+            </div>
+
+            <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-5xl">
+              {auctionData?.title ||
+                "Untitled Auction"}
             </h1>
 
-            <p className="mt-4 leading-7 text-slate-400">
+            <p className="mt-5 text-base leading-7 text-gray-500 dark:text-slate-400">
               {auctionData?.description ||
-                "Place your bid before the auction ends. The highest valid bid wins the auction."}
+                "Place your bid before the auction ends. The highest valid bidder wins the auction."}
             </p>
 
             {/* PRICE */}
 
-            <div className="mt-7 rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 sm:p-6">
-              <p className="text-sm text-slate-400">
+            <div className="mt-7 rounded-3xl border border-orange-200 bg-orange-50 p-5 dark:border-orange-500/20 dark:bg-orange-500/5 sm:p-6">
+              <p className="text-sm font-medium text-gray-500 dark:text-slate-400">
                 {closed
                   ? "Final price"
                   : "Current highest bid"}
@@ -432,11 +565,11 @@ function AuctionDetails({ auction, onBack, onLogin }) {
                 </p>
 
                 <div className="text-right">
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-gray-500 dark:text-slate-500">
                     Total bids
                   </p>
 
-                  <p className="text-xl font-bold">
+                  <p className="text-xl font-black">
                     {auctionData?.bids || 0}
                   </p>
                 </div>
@@ -445,7 +578,7 @@ function AuctionDetails({ auction, onBack, onLogin }) {
 
             {/* INFO */}
 
-            <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-2 gap-3">
               <InfoCard
                 icon={Clock3}
                 label="Time remaining"
@@ -456,29 +589,45 @@ function AuctionDetails({ auction, onBack, onLogin }) {
               />
 
               <InfoCard
-                icon={Gavel}
+                icon={Tag}
                 label="Category"
                 value={
                   auctionData?.category ||
                   "Auction"
                 }
               />
+
+              {auctionData?.location && (
+                <InfoCard
+                  icon={MapPin}
+                  label="Location"
+                  value={auctionData.location}
+                />
+              )}
+
+              {auctionData?.condition && (
+                <InfoCard
+                  icon={CheckCircle2}
+                  label="Condition"
+                  value={auctionData.condition}
+                />
+              )}
             </div>
 
             {/* BID */}
 
             {closed ? (
-              <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center">
+              <div className="mt-6 rounded-3xl border border-gray-200 bg-gray-50 p-7 text-center dark:border-white/10 dark:bg-white/[0.03]">
                 <Gavel
-                  size={28}
-                  className="mx-auto text-slate-500"
+                  size={30}
+                  className="mx-auto text-gray-400 dark:text-slate-500"
                 />
 
-                <h2 className="mt-3 text-xl font-bold">
+                <h2 className="mt-4 text-xl font-black">
                   Bidding is closed
                 </h2>
 
-                <p className="mt-2 text-sm text-slate-400">
+                <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">
                   This auction is no longer
                   accepting bids.
                 </p>
@@ -498,7 +647,7 @@ function AuctionDetails({ auction, onBack, onLogin }) {
 
             {/* TRUST */}
 
-            <div className="mt-5 grid grid-cols-3 gap-2 text-center">
+            <div className="mt-5 grid grid-cols-3 gap-2">
               <Trust
                 icon={ShieldCheck}
                 text="Verified"
@@ -514,40 +663,42 @@ function AuctionDetails({ auction, onBack, onLogin }) {
                 text="Live Bidding"
               />
             </div>
-          </div>
+          </section>
         </div>
 
-        {/* BID HISTORY */}
+        {/* =================================================
+            BID HISTORY
+        ================================================= */}
 
-        <section className="mt-12">
+        <section className="mt-14">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold">
+            <h2 className="text-2xl font-black">
               Bid History
             </h2>
 
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
               Recent bids placed on this auction.
             </p>
           </div>
 
           {!bidHistory.length ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
+            <div className="rounded-3xl border border-gray-200 bg-gray-50 p-10 text-center dark:border-white/10 dark:bg-white/[0.03]">
               <Gavel
-                size={32}
-                className="mx-auto text-slate-600"
+                size={34}
+                className="mx-auto text-gray-300 dark:text-slate-600"
               />
 
               <h3 className="mt-4 font-bold">
                 No bids yet
               </h3>
 
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-2 text-sm text-gray-500 dark:text-slate-500">
                 Be the first person to place a bid.
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-white/10">
-              <div className="divide-y divide-white/10">
+            <div className="overflow-hidden rounded-3xl border border-gray-200 dark:border-white/10">
+              <div className="divide-y divide-gray-100 dark:divide-white/10">
                 {bidHistory.map(
                   (bid, index) => (
                     <div
@@ -556,20 +707,21 @@ function AuctionDetails({ auction, onBack, onLogin }) {
                         bid.id ||
                         `${bid.bidder}-${bid.createdAt}-${index}`
                       }
-                      className="flex items-center justify-between gap-4 bg-white/[0.02] px-4 py-4 sm:px-5"
+                      className="flex items-center justify-between gap-4 bg-white px-4 py-4 dark:bg-white/[0.02] sm:px-6"
                     >
-                      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500/10 text-orange-500">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-500 dark:bg-orange-500/10">
                           <User size={18} />
                         </div>
 
                         <div className="min-w-0">
                           <p className="truncate font-semibold">
                             {bid.bidder ||
+                              bid.user?.name ||
                               "AuctionBD User"}
                           </p>
 
-                          <p className="mt-1 text-xs text-slate-600">
+                          <p className="mt-1 text-xs text-gray-400 dark:text-slate-600">
                             {formatBidDate(
                               bid.createdAt
                             )}
@@ -578,14 +730,12 @@ function AuctionDetails({ auction, onBack, onLogin }) {
                       </div>
 
                       <div className="shrink-0 text-right">
-                        <p className="font-bold text-orange-500">
-                          {money(
-                            bid.amount
-                          )}
+                        <p className="font-black text-orange-500">
+                          {money(bid.amount)}
                         </p>
 
                         {index === 0 && (
-                          <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                          <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-emerald-500">
                             Highest bid
                           </p>
                         )}
@@ -602,9 +752,75 @@ function AuctionDetails({ auction, onBack, onLogin }) {
   );
 }
 
-/* =========================
+/* =========================================================
+   HEADER
+========================================================= */
+
+function DetailsHeader({
+  theme,
+  toggleTheme,
+  onBack,
+}) {
+  return (
+    <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-white/10 dark:bg-slate-950/95">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-2"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white">
+            <Gavel size={19} />
+          </div>
+
+          <div className="text-left">
+            <p className="font-black">
+              AUCTION
+              <span className="text-orange-500">
+                BD
+              </span>
+            </p>
+
+            <p className="hidden text-[9px] tracking-[.2em] text-gray-400 dark:text-slate-500 sm:block">
+              BID. WIN. OWN.
+            </p>
+          </div>
+        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            title={
+              theme === "dark"
+                ? "Switch to light mode"
+                : "Switch to dark mode"
+            }
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 transition hover:border-orange-300 hover:text-orange-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
+          >
+            {theme === "dark" ? (
+              <Sun size={18} />
+            ) : (
+              <Moon size={18} />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onBack}
+            className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white sm:block"
+          >
+            Back to auctions
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* =========================================================
    BID BOX
-========================= */
+========================================================= */
 
 function BidBox({
   bidAmount,
@@ -618,24 +834,20 @@ function BidBox({
 }) {
   const { token, user } = getAuth();
 
-  /*
-   * NOT LOGGED IN
-   */
-
   if (!token || !user) {
     return (
-      <div className="mt-6 rounded-2xl border border-orange-500/20 bg-white p-6 text-slate-900 shadow-xl">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-500">
-            <LogIn size={21} />
+      <div className="mt-6 rounded-3xl border border-gray-200 bg-gray-50 p-6 dark:border-white/10 dark:bg-white/[0.03]">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-50 text-orange-500 dark:bg-orange-500/10">
+            <LogIn size={20} />
           </div>
 
           <div>
-            <h2 className="font-bold text-slate-900">
+            <h2 className="font-black">
               Sign in to bid
             </h2>
 
-            <p className="mt-1 text-sm leading-6 text-slate-500">
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
               You need an AuctionBD account to place bids.
             </p>
           </div>
@@ -643,57 +855,49 @@ function BidBox({
 
         <button
           type="button"
-          onClick={() => {
-            if (typeof onLogin === "function") {
-              onLogin();
-            }
-          }}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3.5 font-bold text-white transition hover:bg-orange-600 active:scale-[.99]"
+          onClick={onLogin}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3.5 font-bold text-white transition hover:bg-orange-600"
         >
           <LogIn size={18} />
           Sign In to Bid
         </button>
 
-        <p className="mt-3 text-center text-xs text-slate-400">
-          New here? Create your free account from the sign-in window.
+        <p className="mt-3 text-center text-xs text-gray-400">
+          New here? Create your free account.
         </p>
       </div>
     );
   }
 
-  /*
-   * LOGGED IN
-   */
-
   return (
     <form
       onSubmit={onSubmit}
-      className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-6"
+      className="mt-6 rounded-3xl border border-gray-200 bg-gray-50 p-6 dark:border-white/10 dark:bg-white/[0.03]"
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold">
+          <h2 className="font-black">
             Place Your Bid
           </h2>
 
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
             Your bid must be higher than the current bid.
           </p>
         </div>
 
-        <div className="hidden rounded-xl bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-400 sm:block">
+        <span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 sm:block">
           Signed in
-        </div>
+        </span>
       </div>
 
-      <div className="mt-5 rounded-xl border border-white/10 bg-slate-950 px-4 py-3">
+      <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-slate-950">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-500/10 text-orange-500">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-50 text-orange-500 dark:bg-orange-500/10">
             <User size={17} />
           </div>
 
           <div className="min-w-0">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-gray-400 dark:text-slate-500">
               Bidding as
             </p>
 
@@ -709,13 +913,13 @@ function BidBox({
       <div className="mt-4">
         <label
           htmlFor="bidAmount"
-          className="mb-2 block text-sm font-medium text-slate-400"
+          className="mb-2 block text-sm font-semibold text-gray-600 dark:text-slate-400"
         >
           Bid amount
         </label>
 
-        <div className="flex items-center rounded-xl border border-white/10 bg-slate-950 px-4 focus-within:border-orange-500/50">
-          <span className="text-slate-500">
+        <div className="flex items-center rounded-xl border border-gray-200 bg-white px-4 transition focus-within:border-orange-500 dark:border-white/10 dark:bg-slate-950">
+          <span className="text-gray-400 dark:text-slate-500">
             ৳
           </span>
 
@@ -733,7 +937,7 @@ function BidBox({
             placeholder={`More than ${currentPrice.toLocaleString(
               "en-BD"
             )}`}
-            className="w-full bg-transparent px-3 py-3 outline-none placeholder:text-slate-600"
+            className="w-full bg-transparent px-3 py-3 text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-slate-600"
           />
         </div>
       </div>
@@ -753,7 +957,7 @@ function BidBox({
       <button
         type="submit"
         disabled={placingBid}
-        className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3.5 font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3.5 font-black text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {placingBid ? (
           <>
@@ -774,9 +978,9 @@ function BidBox({
   );
 }
 
-/* =========================
-   SMALL UI
-========================= */
+/* =========================================================
+   INFO CARD
+========================================================= */
 
 function InfoCard({
   icon: Icon,
@@ -784,64 +988,72 @@ function InfoCard({
   value,
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/[0.03]">
       <Icon
-        size={20}
+        size={18}
         className="text-orange-500"
       />
 
-      <p className="mt-3 text-xs text-slate-500">
+      <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
         {label}
       </p>
 
-      <p className="mt-2 truncate font-semibold">
+      <p className="mt-1 truncate font-bold">
         {value}
       </p>
     </div>
   );
 }
 
+/* =========================================================
+   TRUST
+========================================================= */
+
 function Trust({
   icon: Icon,
   text,
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+    <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center dark:border-white/10 dark:bg-white/[0.03]">
       <Icon
-        size={20}
+        size={19}
         className="mx-auto text-orange-500"
       />
 
-      <p className="mt-1 text-[11px] text-slate-500">
+      <p className="mt-1 text-[11px] font-semibold text-gray-500 dark:text-slate-500">
         {text}
       </p>
     </div>
   );
 }
 
+/* =========================================================
+   NOTICE
+========================================================= */
+
 function Notice({
   type,
   children,
 }) {
-  const success = type === "success";
+  const isSuccess = type === "success";
 
   return (
     <div
       className={`mt-4 flex items-start gap-3 rounded-xl border p-4 text-sm ${
-        success
-          ? "border-emerald-400/20 bg-emerald-400/5 text-emerald-300"
-          : "border-red-400/20 bg-red-400/5 text-red-300"
+        isSuccess
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/5 dark:text-emerald-300"
+          : "border-red-200 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/5 dark:text-red-300"
       }`}
     >
-      {success ? (
+      {isSuccess ? (
         <CheckCircle2
           size={18}
-          className="shrink-0"
+          className="mt-0.5 shrink-0"
         />
       ) : (
         <AlertCircle
           size={18}
-          className="shrink-0"
+          className="mt-0.5 shrink-0"
         />
       )}
 
@@ -849,6 +1061,10 @@ function Notice({
     </div>
   );
 }
+
+/* =========================================================
+   DATE
+========================================================= */
 
 function formatBidDate(date) {
   if (!date) return "";

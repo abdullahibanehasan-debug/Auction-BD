@@ -8,7 +8,7 @@ import { requireAuth } from "../middleware/auth.js";
 
 const router = express.Router();
 
-function makeToken(user) {
+const makeToken = (user) => {
   if (!process.env.JWT_SECRET) {
     throw new Error("JWT_SECRET is missing.");
   }
@@ -21,18 +21,16 @@ function makeToken(user) {
     process.env.JWT_SECRET,
     { expiresIn: "7d" }
   );
-}
+};
 
-function safeUser(user) {
-  return {
-    id: user._id,
-    name: user.name,
-    email: user.email,
-    phone: user.phone,
-    verified: user.verified,
-    role: user.role,
-  };
-}
+const safeUser = (user) => ({
+  id: user._id,
+  name: user.name,
+  email: user.email,
+  phone: user.phone || "",
+  verified: !!user.verified,
+  role: user.role,
+});
 
 // REGISTER
 router.post("/register", async (req, res) => {
@@ -54,7 +52,7 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    const exists = await User.findOne({ email });
+    const exists = await User.exists({ email });
 
     if (exists) {
       return res.status(409).json({
@@ -62,31 +60,21 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    const hashed = await bcrypt.hash(password, 12);
-
-    const verificationToken = crypto
-      .randomBytes(32)
-      .toString("hex");
-
     const user = await User.create({
       name,
       email,
       phone,
-      password: hashed,
-      verificationToken,
-      verificationExpires: new Date(
-        Date.now() + 24 * 60 * 60 * 1000
-      ),
+      password: await bcrypt.hash(password, 12),
+      verificationToken: crypto.randomBytes(32).toString("hex"),
+      verificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
     });
 
-    // Temporary verification system until email service is added.
     console.log(
-      `\nVerification token for ${email}:\n${verificationToken}\n`
+      `Verification token for ${email}: ${user.verificationToken}`
     );
 
     res.status(201).json({
-      message:
-        "Account created. Please verify your account.",
+      message: "Account created. Please verify your account.",
       user: safeUser(user),
       verificationRequired: true,
     });
@@ -99,7 +87,7 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// VERIFY ACCOUNT
+// VERIFY
 router.post("/verify", async (req, res) => {
   try {
     const token = String(req.body.token || "").trim();
@@ -113,9 +101,7 @@ router.post("/verify", async (req, res) => {
     const user = await User.findOne({
       verificationToken: token,
       verificationExpires: { $gt: new Date() },
-    }).select(
-      "+verificationToken +verificationExpires"
-    );
+    }).select("+verificationToken +verificationExpires");
 
     if (!user) {
       return res.status(400).json({
@@ -157,20 +143,15 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email }).select(
-      "+password"
-    );
+    const user = await User.findOne({ email }).select("+password");
 
-    if (!user || !user.active) {
+    if (!user || user.active === false) {
       return res.status(401).json({
         message: "Invalid email or password.",
       });
     }
 
-    const valid = await bcrypt.compare(
-      password,
-      user.password
-    );
+    const valid = await bcrypt.compare(password, user.password);
 
     if (!valid) {
       return res.status(401).json({
@@ -178,11 +159,9 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const token = makeToken(user);
-
     res.json({
       message: "Login successful.",
-      token,
+      token: makeToken(user),
       user: safeUser(user),
     });
   } catch (error) {
@@ -195,14 +174,14 @@ router.post("/login", async (req, res) => {
 });
 
 // CURRENT USER
-router.get("/me", requireAuth, async (req, res) => {
+router.get("/me", requireAuth, (req, res) => {
   res.json({
     user: safeUser(req.user),
   });
 });
 
 // LOGOUT
-router.post("/logout", requireAuth, (req, res) => {
+router.post("/logout", requireAuth, (_req, res) => {
   res.json({
     message: "Logged out successfully.",
   });

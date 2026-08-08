@@ -40,34 +40,16 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow server-to-server / same-origin requests.
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      if (allowedOrigins.includes(origin)) {
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
       console.log("Blocked CORS origin:", origin);
-
-      return callback(
-        new Error("Not allowed by CORS")
-      );
+      return callback(new Error("Not allowed by CORS"));
     },
-
     credentials: true,
-
-    methods: [
-      "GET",
-      "POST",
-      "PUT",
-      "PATCH",
-      "DELETE",
-      "OPTIONS",
-    ],
-
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
       "Authorization",
@@ -82,14 +64,14 @@ app.use(
 
 app.use(
   express.json({
-    limit: "5mb",
+    limit: "10mb",
   })
 );
 
 app.use(
   express.urlencoded({
     extended: true,
-    limit: "5mb",
+    limit: "10mb",
   })
 );
 
@@ -98,16 +80,8 @@ app.use(
 ========================= */
 
 app.use((req, res, next) => {
-  res.setHeader(
-    "X-Content-Type-Options",
-    "nosniff"
-  );
-
-  res.setHeader(
-    "X-Frame-Options",
-    "DENY"
-  );
-
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
   res.setHeader(
     "Referrer-Policy",
     "strict-origin-when-cross-origin"
@@ -122,30 +96,22 @@ app.use((req, res, next) => {
 
 app.use(
   "/uploads",
-  express.static(
-    path.join(__dirname, "uploads")
-  )
+  express.static(path.join(__dirname, "uploads"))
 );
 
 /* =========================
-   HEALTH CHECK
+   HEALTH
 ========================= */
 
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-
     database:
       mongoose.connection.readyState === 1
         ? "connected"
         : "disconnected",
-
-    uptime: Math.floor(
-      process.uptime()
-    ),
-
-    timestamp:
-      new Date().toISOString(),
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -165,25 +131,28 @@ app.get("/", (req, res) => {
    API ROUTES
 ========================= */
 
-app.use(
-  "/api/auth",
-  authRoutes
-);
+app.use("/api/auth", authRoutes);
 
-app.use(
-  "/api/auctions",
-  auctionRoutes
-);
+app.use("/api/auctions", auctionRoutes);
 
-app.use(
-  "/api/sellers",
-  sellerRoutes
-);
+app.use("/api/admin", adminRoutes);
 
-app.use(
-  "/api/admin",
-  adminRoutes
-);
+/*
+  IMPORTANT:
+  Your frontend uses:
+
+  /api/seller-requests
+  /api/seller-requests/mine
+
+  So the router MUST be mounted here.
+*/
+app.use("/api/seller-requests", sellerRoutes);
+
+/*
+  Keep the old route too so older frontend code
+  doesn't suddenly break.
+*/
+app.use("/api/sellers", sellerRoutes);
 
 /* =========================
    404
@@ -200,25 +169,16 @@ app.use((req, res) => {
    ERROR HANDLER
 ========================= */
 
-app.use(
-  (error, req, res, next) => {
-    console.error(
-      "Server error:",
-      error
-    );
+app.use((error, req, res, next) => {
+  console.error("Server error:", error);
 
-    res.status(
-      error.status || 500
-    ).json({
-      message:
-        process.env.NODE_ENV ===
-        "production"
-          ? "Internal server error."
-          : error.message ||
-            "Internal server error.",
-    });
-  }
-);
+  res.status(error.status || 500).json({
+    message:
+      process.env.NODE_ENV === "production"
+        ? "Internal server error."
+        : error.message || "Internal server error.",
+  });
+});
 
 /* =========================
    DATABASE
@@ -231,18 +191,13 @@ async function connectDatabase() {
     );
   }
 
-  await mongoose.connect(
-    process.env.MONGO_URI,
-    {
-      serverSelectionTimeoutMS: 10000,
-      maxPoolSize: 10,
-      minPoolSize: 2,
-    }
-  );
+  await mongoose.connect(process.env.MONGO_URI, {
+    serverSelectionTimeoutMS: 10000,
+    maxPoolSize: 10,
+    minPoolSize: 2,
+  });
 
-  console.log(
-    "MongoDB connected successfully ✅"
-  );
+  console.log("MongoDB connected successfully ✅");
 }
 
 /* =========================
@@ -253,25 +208,17 @@ async function startServer() {
   try {
     await connectDatabase();
 
-    app.listen(
-      PORT,
-      "0.0.0.0",
-      () => {
-        console.log(
-          `AuctionBD API running on port ${PORT} 🚀`
-        );
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(
+        `AuctionBD API running on port ${PORT} 🚀`
+      );
 
-        console.log(
-          `Local API: http://localhost:${PORT}`
-        );
-      }
-    );
+      console.log(
+        `Local API: http://localhost:${PORT}`
+      );
+    });
   } catch (error) {
-    console.error(
-      "Server startup failed ❌",
-      error
-    );
-
+    console.error("Server startup failed ❌", error);
     process.exit(1);
   }
 }
@@ -281,34 +228,19 @@ async function startServer() {
 ========================= */
 
 async function shutdown(signal) {
-  console.log(
-    `${signal}: shutting down...`
-  );
+  console.log(`${signal}: shutting down...`);
 
   try {
     await mongoose.connection.close();
-
-    console.log(
-      "MongoDB connection closed."
-    );
+    console.log("MongoDB connection closed.");
   } catch (error) {
-    console.error(
-      "Error closing MongoDB:",
-      error
-    );
+    console.error("Error closing MongoDB:", error);
   } finally {
     process.exit(0);
   }
 }
 
-process.on(
-  "SIGINT",
-  () => shutdown("SIGINT")
-);
-
-process.on(
-  "SIGTERM",
-  () => shutdown("SIGTERM")
-);
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 startServer();
