@@ -19,25 +19,35 @@ const API_URL =
 const FALLBACK_IMAGE =
   "https://placehold.co/800x800/0f172a/fbbf24?text=Auction+BD";
 
+const TOKEN_KEY = "auctionbd_token";
+const USER_KEY = "auctionbd_user";
+
 const money = (value = 0) =>
   `৳${Number(value).toLocaleString("en-BD")}`;
 
-function getStoredUser() {
+function getAuth() {
   try {
-    const token = localStorage.getItem("auctionbd_token");
-    const savedUser = localStorage.getItem("auctionbd_user");
+    const token = localStorage.getItem(TOKEN_KEY);
+    const user = JSON.parse(
+      localStorage.getItem(USER_KEY) || "null"
+    );
 
-    return {
-      token,
-      user: savedUser ? JSON.parse(savedUser) : null,
-    };
+    return { token, user };
   } catch {
     return { token: null, user: null };
   }
 }
 
+function clearAuth() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
 function AuctionDetails({ auction, onBack, onLogin }) {
-  const [auctionData, setAuctionData] = useState(auction || null);
+  const [auctionData, setAuctionData] = useState(
+    auction || null
+  );
+
   const [bidHistory, setBidHistory] = useState([]);
   const [bidAmount, setBidAmount] = useState("");
   const [loading, setLoading] = useState(true);
@@ -45,21 +55,20 @@ function AuctionDetails({ auction, onBack, onLogin }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const stored = getStoredUser();
-  const token = stored.token;
-  const user = stored.user;
-
   const auctionId =
     auctionData?._id || auctionData?.id;
 
-  const currentPrice =
-    Number(auctionData?.price || 0);
+  const currentPrice = Number(
+    auctionData?.price || 0
+  );
 
   const closed = [
     "sold",
     "ended",
     "cancelled",
-  ].includes(auctionData?.status);
+  ].includes(
+    String(auctionData?.status || "").toLowerCase()
+  );
 
   async function loadAuction() {
     if (!auctionId) {
@@ -78,6 +87,7 @@ function AuctionDetails({ auction, onBack, onLogin }) {
           headers: {
             Accept: "application/json",
           },
+          cache: "no-store",
         }
       );
 
@@ -87,18 +97,20 @@ function AuctionDetails({ auction, onBack, onLogin }) {
 
       if (!response.ok) {
         throw new Error(
-          data.message ||
-            "Failed to load auction."
+          data.message || "Failed to load auction."
         );
       }
 
-      setAuctionData({
+      const normalized = {
         ...data,
         id: data._id || data.id,
-      });
+      };
 
+      setAuctionData(normalized);
       setBidHistory(
-        data.bidHistory || []
+        Array.isArray(data.bidHistory)
+          ? data.bidHistory
+          : []
       );
     } catch (err) {
       console.error(
@@ -126,8 +138,11 @@ function AuctionDetails({ auction, onBack, onLogin }) {
     setSuccess("");
 
     /*
-     * LOGIN IS REQUIRED.
+     * Always check the current localStorage state.
+     * This prevents stale login state.
      */
+    const { token, user } = getAuth();
+
     if (!token || !user) {
       if (onLogin) {
         onLogin();
@@ -149,7 +164,10 @@ function AuctionDetails({ auction, onBack, onLogin }) {
 
     const amount = Number(bidAmount);
 
-    if (!Number.isFinite(amount) || amount <= currentPrice) {
+    if (
+      !Number.isFinite(amount) ||
+      amount <= currentPrice
+    ) {
       setError(
         `Your bid must be higher than ${money(
           currentPrice
@@ -166,14 +184,12 @@ function AuctionDetails({ auction, onBack, onLogin }) {
         {
           method: "POST",
           headers: {
+            Accept: "application/json",
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             amount,
-            bidder: user.name,
-            bidderId: user.id,
-            bidderEmail: user.email,
           }),
         }
       );
@@ -183,23 +199,18 @@ function AuctionDetails({ auction, onBack, onLogin }) {
         .catch(() => ({}));
 
       /*
-       * Session expired / invalid.
+       * Login expired.
        */
       if (response.status === 401) {
-        localStorage.removeItem(
-          "auctionbd_token"
-        );
-        localStorage.removeItem(
-          "auctionbd_user"
+        clearAuth();
+
+        setError(
+          "Your login session expired. Please sign in again."
         );
 
         if (onLogin) {
           onLogin();
         }
-
-        setError(
-          "Your login session expired. Please sign in again."
-        );
 
         return;
       }
@@ -211,6 +222,9 @@ function AuctionDetails({ auction, onBack, onLogin }) {
         );
       }
 
+      /*
+       * Update auction immediately.
+       */
       if (data.auction) {
         setAuctionData({
           ...data.auction,
@@ -220,10 +234,13 @@ function AuctionDetails({ auction, onBack, onLogin }) {
         });
       }
 
+      /*
+       * Add new bid to history.
+       */
       if (data.bid) {
-        setBidHistory((history) => [
+        setBidHistory((current) => [
           data.bid,
-          ...history,
+          ...current,
         ]);
       } else {
         await loadAuction();
@@ -262,9 +279,9 @@ function AuctionDetails({ auction, onBack, onLogin }) {
   if (error && !auctionData?.title) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
-        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center">
           <AlertCircle
-            size={36}
+            size={42}
             className="mx-auto text-red-400"
           />
 
@@ -288,18 +305,22 @@ function AuctionDetails({ auction, onBack, onLogin }) {
     );
   }
 
+  const status = String(
+    auctionData?.status || "active"
+  ).toLowerCase();
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       {/* NAVBAR */}
       <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
           <button
             type="button"
             onClick={onBack}
             className="flex items-center gap-3"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400 text-sm font-black text-black">
-              AB
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-400 text-slate-950">
+              <Gavel size={19} />
             </div>
 
             <div className="text-left">
@@ -310,7 +331,7 @@ function AuctionDetails({ auction, onBack, onLogin }) {
                 </span>
               </p>
 
-              <p className="text-[9px] tracking-[.2em] text-slate-500">
+              <p className="hidden text-[9px] tracking-[.2em] text-slate-500 sm:block">
                 BID. WIN. OWN.
               </p>
             </div>
@@ -326,18 +347,16 @@ function AuctionDetails({ auction, onBack, onLogin }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-10">
-        {/* BREADCRUMB */}
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
         <button
           type="button"
           onClick={onBack}
-          className="mb-8 flex items-center gap-2 text-sm text-slate-500 transition hover:text-white"
+          className="mb-7 flex items-center gap-2 text-sm text-slate-500 transition hover:text-white"
         >
           <ArrowLeft size={16} />
           Back to Live Auctions
         </button>
 
-        {/* PRODUCT */}
         <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
           {/* IMAGE */}
           <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
@@ -359,7 +378,7 @@ function AuctionDetails({ auction, onBack, onLogin }) {
               />
 
               <div
-                className={`absolute left-5 top-5 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold ${
+                className={`absolute left-4 top-4 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold ${
                   closed
                     ? "bg-slate-700"
                     : "bg-red-500"
@@ -372,14 +391,11 @@ function AuctionDetails({ auction, onBack, onLogin }) {
                   }`}
                 />
 
-                {auctionData.status ===
-                "sold"
+                {status === "sold"
                   ? "SOLD"
-                  : auctionData.status ===
-                    "ended"
+                  : status === "ended"
                   ? "AUCTION ENDED"
-                  : auctionData.status ===
-                    "cancelled"
+                  : status === "cancelled"
                   ? "CANCELLED"
                   : "LIVE AUCTION"}
               </div>
@@ -393,7 +409,7 @@ function AuctionDetails({ auction, onBack, onLogin }) {
                 "Auction"}
             </p>
 
-            <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-5xl">
+            <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
               {auctionData.title}
             </h1>
 
@@ -403,7 +419,7 @@ function AuctionDetails({ auction, onBack, onLogin }) {
             </p>
 
             {/* PRICE */}
-            <div className="mt-8 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-6">
+            <div className="mt-7 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-5 sm:p-6">
               <p className="text-sm text-slate-500">
                 {closed
                   ? "Final price"
@@ -411,7 +427,7 @@ function AuctionDetails({ auction, onBack, onLogin }) {
               </p>
 
               <div className="mt-2 flex items-end justify-between gap-4">
-                <p className="text-4xl font-black text-amber-400">
+                <p className="text-3xl font-black text-amber-400 sm:text-4xl">
                   {money(
                     auctionData.soldPrice ||
                       auctionData.price
@@ -464,148 +480,21 @@ function AuctionDetails({ auction, onBack, onLogin }) {
                 </h2>
 
                 <p className="mt-2 text-sm text-slate-500">
-                  This auction is no longer accepting bids.
-                </p>
-              </div>
-            ) : !token || !user ? (
-              /* NOT LOGGED IN */
-              <div className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-400/10 text-amber-400">
-                    <LogIn size={21} />
-                  </div>
-
-                  <div>
-                    <h2 className="font-bold">
-                      Sign in to bid
-                    </h2>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      You need an AuctionBD account to place bids.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={onLogin}
-                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3.5 font-bold text-black transition hover:bg-amber-300"
-                >
-                  <LogIn size={18} />
-                  Sign In to Bid
-                </button>
-
-                <p className="mt-3 text-center text-xs text-slate-600">
-                  New here? You can create an account from the sign-in page.
+                  This auction is no longer
+                  accepting bids.
                 </p>
               </div>
             ) : (
-              /* LOGGED IN */
-              <form
+              <BidBox
+                bidAmount={bidAmount}
+                setBidAmount={setBidAmount}
+                currentPrice={currentPrice}
+                placingBid={placingBid}
+                error={error}
+                success={success}
                 onSubmit={handleBid}
-                className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-6"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-bold">
-                      Place Your Bid
-                    </h2>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Your bid must be higher than the current bid.
-                    </p>
-                  </div>
-
-                  <div className="hidden rounded-xl bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-400 sm:block">
-                    Signed in
-                  </div>
-                </div>
-
-                {/* USER */}
-                <div className="mt-5 rounded-xl border border-white/10 bg-slate-950 px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400/10 text-amber-400">
-                      <User size={17} />
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-slate-600">
-                        Bidding as
-                      </p>
-
-                      <p className="font-semibold">
-                        {user.name}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* AMOUNT */}
-                <div className="mt-4">
-                  <label
-                    htmlFor="bidAmount"
-                    className="mb-2 block text-sm font-medium text-slate-400"
-                  >
-                    Bid amount
-                  </label>
-
-                  <div className="flex items-center rounded-xl border border-white/10 bg-slate-950 px-4 focus-within:border-amber-400/50">
-                    <span className="text-slate-500">
-                      ৳
-                    </span>
-
-                    <input
-                      id="bidAmount"
-                      type="number"
-                      min={currentPrice + 1}
-                      step="1"
-                      value={bidAmount}
-                      onChange={(e) =>
-                        setBidAmount(
-                          e.target.value
-                        )
-                      }
-                      placeholder={`More than ${currentPrice.toLocaleString(
-                        "en-BD"
-                      )}`}
-                      className="w-full bg-transparent px-3 py-3 outline-none placeholder:text-slate-600"
-                    />
-                  </div>
-                </div>
-
-                {error && (
-                  <Notice type="error">
-                    {error}
-                  </Notice>
-                )}
-
-                {success && (
-                  <Notice type="success">
-                    {success}
-                  </Notice>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={placingBid}
-                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3.5 font-bold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {placingBid ? (
-                    <>
-                      <Loader2
-                        size={18}
-                        className="animate-spin"
-                      />
-                      Placing Bid...
-                    </>
-                  ) : (
-                    <>
-                      <Gavel size={18} />
-                      Place Bid
-                    </>
-                  )}
-                </button>
-              </form>
+                onLogin={onLogin}
+              />
             )}
 
             {/* TRUST */}
@@ -652,7 +541,8 @@ function AuctionDetails({ auction, onBack, onLogin }) {
               </h3>
 
               <p className="mt-2 text-sm text-slate-500">
-                Be the first person to place a bid.
+                Be the first person to place a
+                bid.
               </p>
             </div>
           ) : (
@@ -666,15 +556,15 @@ function AuctionDetails({ auction, onBack, onLogin }) {
                         bid.id ||
                         `${bid.bidder}-${bid.createdAt}-${index}`
                       }
-                      className="flex items-center justify-between gap-4 bg-white/[0.02] px-5 py-4 transition hover:bg-white/[0.04]"
+                      className="flex items-center justify-between gap-4 bg-white/[0.02] px-4 py-4 sm:px-5"
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-400/10 text-amber-400">
+                      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-400/10 text-amber-400">
                           <User size={18} />
                         </div>
 
-                        <div>
-                          <p className="font-semibold">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold">
                             {bid.bidder ||
                               "AuctionBD User"}
                           </p>
@@ -687,11 +577,9 @@ function AuctionDetails({ auction, onBack, onLogin }) {
                         </div>
                       </div>
 
-                      <div className="text-right">
+                      <div className="shrink-0 text-right">
                         <p className="font-bold text-amber-400">
-                          {money(
-                            bid.amount
-                          )}
+                          {money(bid.amount)}
                         </p>
 
                         {index === 0 && (
@@ -712,7 +600,171 @@ function AuctionDetails({ auction, onBack, onLogin }) {
   );
 }
 
-/* ---------- SMALL UI ---------- */
+/* =========================
+   BID BOX
+========================= */
+
+function BidBox({
+  bidAmount,
+  setBidAmount,
+  currentPrice,
+  placingBid,
+  error,
+  success,
+  onSubmit,
+  onLogin,
+}) {
+  const { token, user } = getAuth();
+
+  if (!token || !user) {
+    return (
+      <div className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-5 sm:p-6">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-400/10 text-amber-400">
+            <LogIn size={21} />
+          </div>
+
+          <div>
+            <h2 className="font-bold">
+              Sign in to bid
+            </h2>
+
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              You need an AuctionBD account to
+              place bids.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onLogin}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3.5 font-bold text-black transition hover:bg-amber-300"
+        >
+          <LogIn size={18} />
+          Sign In to Bid
+        </button>
+
+        <p className="mt-3 text-center text-xs text-slate-600">
+          New here? You can create an account
+          from the sign-in window.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={onSubmit}
+      className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">
+            Place Your Bid
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Your bid must be higher than the
+            current bid.
+          </p>
+        </div>
+
+        <div className="hidden rounded-xl bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-400 sm:block">
+          Signed in
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-xl border border-white/10 bg-slate-950 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400/10 text-amber-400">
+            <User size={17} />
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-xs text-slate-600">
+              Bidding as
+            </p>
+
+            <p className="truncate font-semibold">
+              {user.name ||
+                user.email ||
+                "AuctionBD User"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <label
+          htmlFor="bidAmount"
+          className="mb-2 block text-sm font-medium text-slate-400"
+        >
+          Bid amount
+        </label>
+
+        <div className="flex items-center rounded-xl border border-white/10 bg-slate-950 px-4 focus-within:border-amber-400/50">
+          <span className="text-slate-500">
+            ৳
+          </span>
+
+          <input
+            id="bidAmount"
+            type="number"
+            inputMode="numeric"
+            min={currentPrice + 1}
+            step="1"
+            value={bidAmount}
+            onChange={(e) =>
+              setBidAmount(e.target.value)
+            }
+            placeholder={`More than ${currentPrice.toLocaleString(
+              "en-BD"
+            )}`}
+            className="w-full bg-transparent px-3 py-3 outline-none placeholder:text-slate-600"
+          />
+        </div>
+      </div>
+
+      {error && (
+        <Notice type="error">
+          {error}
+        </Notice>
+      )}
+
+      {success && (
+        <Notice type="success">
+          {success}
+        </Notice>
+      )}
+
+      <button
+        type="submit"
+        disabled={placingBid}
+        className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3.5 font-bold text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {placingBid ? (
+          <>
+            <Loader2
+              size={18}
+              className="animate-spin"
+            />
+            Placing Bid...
+          </>
+        ) : (
+          <>
+            <Gavel size={18} />
+            Place Bid
+          </>
+        )}
+      </button>
+    </form>
+  );
+}
+
+/* =========================
+   SMALL UI
+========================= */
 
 function InfoCard({
   icon: Icon,
@@ -720,13 +772,15 @@ function InfoCard({
   value,
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <div className="flex items-center gap-2 text-slate-500">
-        <Icon size={16} />
-        <span className="text-xs">
-          {label}
-        </span>
-      </div>
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <Icon
+        size={18}
+        className="text-amber-400"
+      />
+
+      <p className="mt-3 text-xs text-slate-500">
+        {label}
+      </p>
 
       <p className="mt-2 truncate font-semibold">
         {value}
@@ -740,12 +794,15 @@ function Trust({
   text,
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-slate-500">
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-2 py-3">
       <Icon
         size={18}
-        className="mx-auto mb-1 text-amber-400"
+        className="mx-auto text-amber-400"
       />
-      {text}
+
+      <p className="mt-1 text-[11px] text-slate-500">
+        {text}
+      </p>
     </div>
   );
 }
