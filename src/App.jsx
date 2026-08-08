@@ -33,12 +33,13 @@ import {
 } from "lucide-react";
 
 /* =========================================================
-   CONFIG
+CONFIG
 ========================================================= */
 
-const API_URL =
+const API_URL = (
   import.meta.env.VITE_API_URL ||
-  "https://auction-bd.onrender.com";
+  "https://auction-bd.onrender.com"
+).replace(/\/+$/, "");
 
 const TOKEN_KEY = "auctionbd_token";
 const USER_KEY = "auctionbd_user";
@@ -59,7 +60,7 @@ const CATEGORIES = [
 ];
 
 /* =========================================================
-   AUTH HELPERS
+AUTH HELPERS
 ========================================================= */
 
 function getToken() {
@@ -105,7 +106,7 @@ function clearAuth() {
 }
 
 /* =========================================================
-   API
+API
 ========================================================= */
 
 async function api(path, options = {}) {
@@ -124,13 +125,26 @@ async function api(path, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(
-    `${API_URL}${path}`,
-    {
-      ...options,
-      headers,
-    }
-  );
+  let response;
+
+  try {
+    response = await fetch(
+      `${API_URL}${path}`,
+      {
+        ...options,
+        headers,
+        cache:
+          options.cache ||
+          "no-store",
+      }
+    );
+  } catch (error) {
+    console.error("API connection error:", error);
+
+    throw new Error(
+      `Unable to connect to the AuctionBD server. Please check your internet connection or try again.`
+    );
+  }
 
   const text = await response.text();
 
@@ -140,7 +154,9 @@ async function api(path, options = {}) {
     data = text ? JSON.parse(text) : {};
   } catch {
     data = {
-      message: text || "Invalid server response.",
+      message:
+        text ||
+        "Invalid server response.",
     };
   }
 
@@ -153,13 +169,25 @@ async function api(path, options = {}) {
     if (response.status === 404) {
       message =
         data?.message ||
-        `API endpoint not found: ${path}. Make sure your backend is running and this route exists.`;
+        `API endpoint not found: ${path}. Check that the backend route exists.`;
     }
 
     if (response.status === 401) {
       message =
         data?.message ||
         "Your login session is invalid or expired.";
+    }
+
+    if (response.status === 403) {
+      message =
+        data?.message ||
+        "You do not have permission to perform this action.";
+    }
+
+    if (response.status >= 500) {
+      message =
+        data?.message ||
+        "The AuctionBD server encountered an error. Please try again.";
     }
 
     throw new Error(message);
@@ -169,7 +197,7 @@ async function api(path, options = {}) {
 }
 
 /* =========================================================
-   HELPERS
+HELPERS
 ========================================================= */
 
 function money(value = 0) {
@@ -223,77 +251,79 @@ function statusInfo(status) {
 }
 
 /* =========================================================
-   GLOBAL STYLES
+GLOBAL STYLES
 ========================================================= */
 
 function GlobalStyles({ dark }) {
   return (
-    <style>{`
-      * {
-        box-sizing: border-box;
-      }
+    <style>
+      {`
+        * {
+          box-sizing: border-box;
+        }
 
-      html {
-        scroll-behavior: smooth;
-      }
+        html {
+          scroll-behavior: smooth;
+        }
 
-      body {
-        margin: 0;
-        transition:
-          background-color .2s ease,
-          color .2s ease;
-      }
+        body {
+          margin: 0;
+          transition:
+            background-color .2s ease,
+            color .2s ease;
+        }
 
-      .field {
-        width: 100%;
-        border-radius: 12px;
-        border: 1px solid ${
-          dark ? "#334155" : "#e5e7eb"
-        };
-        background: ${
-          dark ? "#0f172a" : "#ffffff"
-        };
-        padding: 13px 15px;
-        outline: none;
-        color: ${
-          dark ? "#f8fafc" : "#111827"
-        };
-        transition: .2s ease;
-      }
+        .field {
+          width: 100%;
+          border-radius: 12px;
+          border: 1px solid ${
+            dark ? "#334155" : "#e5e7eb"
+          };
+          background: ${
+            dark ? "#0f172a" : "#ffffff"
+          };
+          padding: 13px 15px;
+          outline: none;
+          color: ${
+            dark ? "#f8fafc" : "#111827"
+          };
+          transition: .2s ease;
+        }
 
-      .field:focus {
-        border-color: #f59e0b;
-        box-shadow:
-          0 0 0 3px rgba(245,158,11,.12);
-      }
+        .field:focus {
+          border-color: #f59e0b;
+          box-shadow:
+            0 0 0 3px rgba(245,158,11,.12);
+        }
 
-      .field::placeholder {
-        color: ${
-          dark ? "#64748b" : "#9ca3af"
-        };
-      }
+        .field::placeholder {
+          color: ${
+            dark ? "#64748b" : "#9ca3af"
+          };
+        }
 
-      select option {
-        background: ${
-          dark ? "#0f172a" : "#ffffff"
-        };
-        color: ${
-          dark ? "#f8fafc" : "#111827"
-        };
-      }
+        select option {
+          background: ${
+            dark ? "#0f172a" : "#ffffff"
+          };
+          color: ${
+            dark ? "#f8fafc" : "#111827"
+          };
+        }
 
-      input,
-      textarea,
-      select,
-      button {
-        font-family: inherit;
-      }
-    `}</style>
+        input,
+        textarea,
+        select,
+        button {
+          font-family: inherit;
+        }
+      `}
+    </style>
   );
 }
 
 /* =========================================================
-   AUCTION CARD
+AUCTION CARD
 ========================================================= */
 
 function AuctionCard({
@@ -303,7 +333,10 @@ function AuctionCard({
   onFavorite,
   dark,
 }) {
-  const status = statusInfo(auction.status);
+  const status = statusInfo(
+    auction.status
+  );
+
   const active =
     auction.status === "active";
 
@@ -342,6 +375,7 @@ function AuctionCard({
           {active && (
             <i className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-white" />
           )}
+
           {status.label}
         </span>
 
@@ -459,6 +493,7 @@ function AuctionCard({
             }`}
           >
             <Clock3 size={14} />
+
             {auction.time ||
               status.label}
           </span>
@@ -483,7 +518,7 @@ function AuctionCard({
 }
 
 /* =========================================================
-   SKELETON
+SKELETON
 ========================================================= */
 
 function Skeleton({ dark }) {
@@ -543,7 +578,7 @@ function Skeleton({ dark }) {
 }
 
 /* =========================================================
-   AUTH MODAL
+AUTH MODAL
 ========================================================= */
 
 function AuthModal({
@@ -647,10 +682,6 @@ function AuthModal({
     setLoading(true);
 
     try {
-      /*
-       * IMPORTANT:
-       * These are the actual auth endpoints.
-       */
       const path = loginMode
         ? "/api/auth/login"
         : "/api/auth/register";
@@ -683,10 +714,6 @@ function AuthModal({
         data?.account ||
         null;
 
-      /*
-       * Some backends register the account
-       * but do not automatically log the user in.
-       */
       if (!token) {
         if (!loginMode) {
           setSuccess(
@@ -704,7 +731,10 @@ function AuthModal({
         );
       }
 
-      saveAuth(token, loggedUser);
+      saveAuth(
+        token,
+        loggedUser
+      );
 
       const finalUser =
         loggedUser || getSavedUser();
@@ -750,8 +780,6 @@ function AuthModal({
             : "bg-white"
         }`}
       >
-        <div className="h-1.5 bg-orange-500" />
-
         <div className="p-6 sm:p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -1071,7 +1099,7 @@ function AuthModal({
 }
 
 /* =========================================================
-   SELLER PAGE
+SELLER PAGE
 ========================================================= */
 
 function SellerPage({
@@ -1228,11 +1256,13 @@ function SellerPage({
       setVideos([]);
 
       if (imageInput.current) {
-        imageInput.current.value = "";
+        imageInput.current.value =
+          "";
       }
 
       if (videoInput.current) {
-        videoInput.current.value = "";
+        videoInput.current.value =
+          "";
       }
 
       await loadRequests();
@@ -1279,7 +1309,7 @@ function SellerPage({
 
   if (!user && !getToken()) {
     return (
-      <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
+      <main className="mx-auto max-w-7xl px-6 py-12">
         <button
           onClick={onBack}
           className={`mb-7 text-sm ${
@@ -1305,7 +1335,9 @@ function SellerPage({
             Login required
           </h1>
 
-          <p className={`mt-3 ${muted}`}>
+          <p
+            className={`mt-3 ${muted}`}
+          >
             Create an account or sign in
             before listing your item.
           </p>
@@ -1322,7 +1354,7 @@ function SellerPage({
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
+    <main className="mx-auto max-w-7xl px-6 py-12">
       <button
         onClick={onBack}
         className={`mb-7 text-sm ${
@@ -1347,7 +1379,9 @@ function SellerPage({
               List your item
             </h1>
 
-            <p className={`mt-3 ${muted}`}>
+            <p
+              className={`mt-3 ${muted}`}
+            >
               Upload photos, provide the
               details and submit your item
               for review.
@@ -1366,6 +1400,7 @@ function SellerPage({
                 size={20}
                 className="shrink-0"
               />
+
               <span>{message}</span>
             </div>
           )}
@@ -1382,6 +1417,7 @@ function SellerPage({
                 size={20}
                 className="shrink-0"
               />
+
               <span>{error}</span>
             </div>
           )}
@@ -1610,7 +1646,9 @@ function SellerPage({
               />
 
               {videos.length > 0 && (
-                <p className={`mt-2 text-sm ${muted}`}>
+                <p
+                  className={`mt-2 text-sm ${muted}`}
+                >
                   {videos.length} video
                   {videos.length === 1
                     ? ""
@@ -1653,7 +1691,8 @@ function SellerPage({
               <div className="mt-6 flex justify-center">
                 <Loader2 className="animate-spin text-orange-500" />
               </div>
-            ) : requests.length === 0 ? (
+            ) : requests.length ===
+              0 ? (
               <div
                 className={`mt-8 text-center text-sm ${muted}`}
               >
@@ -1661,6 +1700,7 @@ function SellerPage({
                   size={35}
                   className="mx-auto mb-3 text-gray-300"
                 />
+
                 No requests yet.
               </div>
             ) : (
@@ -1724,7 +1764,7 @@ function SellerPage({
 }
 
 /* =========================================================
-   MAIN APP
+MAIN APP
 ========================================================= */
 
 function AuctionHome() {
@@ -1769,9 +1809,11 @@ function AuctionHome() {
         if (saved === "light")
           return false;
 
-        return window.matchMedia?.(
-          "(prefers-color-scheme: dark)"
-        ).matches || false;
+        return (
+          window.matchMedia?.(
+            "(prefers-color-scheme: dark)"
+          ).matches || false
+        );
       } catch {
         return false;
       }
@@ -1791,7 +1833,7 @@ function AuctionHome() {
     });
 
   /* =======================================================
-     THEME
+  THEME
   ======================================================= */
 
   useEffect(() => {
@@ -1813,7 +1855,7 @@ function AuctionHome() {
   }, [dark]);
 
   /* =======================================================
-     LOAD AUCTIONS
+  LOAD AUCTIONS
   ======================================================= */
 
   const loadAuctions =
@@ -1871,7 +1913,7 @@ function AuctionHome() {
   }, [favorites]);
 
   /* =======================================================
-     FILTER
+  FILTER
   ======================================================= */
 
   const filteredAuctions =
@@ -1911,7 +1953,7 @@ function AuctionHome() {
     ]);
 
   /* =======================================================
-     FAVORITES
+  FAVORITES
   ======================================================= */
 
   const toggleFavorite =
@@ -1926,7 +1968,7 @@ function AuctionHome() {
     }, []);
 
   /* =======================================================
-     SCROLL
+  SCROLL
   ======================================================= */
 
   const scrollTo = (id) => {
@@ -1939,7 +1981,7 @@ function AuctionHome() {
   };
 
   /* =======================================================
-     AUTH SUCCESS
+  AUTH SUCCESS
   ======================================================= */
 
   const handleAuthSuccess = (
@@ -1953,7 +1995,7 @@ function AuctionHome() {
   };
 
   /* =======================================================
-     LOGOUT
+  LOGOUT
   ======================================================= */
 
   const logout = () => {
@@ -1964,7 +2006,7 @@ function AuctionHome() {
   };
 
   /* =======================================================
-     SELLER
+  SELLER
   ======================================================= */
 
   const openSeller = () => {
@@ -1982,7 +2024,7 @@ function AuctionHome() {
   };
 
   /* =======================================================
-     AUCTION DETAILS
+  AUCTION DETAILS
   ======================================================= */
 
   if (selectedAuction) {
@@ -1994,6 +2036,8 @@ function AuctionHome() {
             : "min-h-screen bg-white text-gray-900"
         }
       >
+        <GlobalStyles dark={dark} />
+
         <AuctionDetails
           auction={selectedAuction}
           onBack={() => {
@@ -2003,6 +2047,7 @@ function AuctionHome() {
           onLogin={() =>
             setAuthMode("login")
           }
+          dark={dark}
         />
 
         {authMode && (
@@ -2046,7 +2091,7 @@ function AuctionHome() {
   }
 
   /* =======================================================
-     SELLER PAGE
+  SELLER PAGE
   ======================================================= */
 
   if (page === "seller") {
@@ -2151,7 +2196,7 @@ function AuctionHome() {
   }
 
   /* =======================================================
-     HOME
+  HOME
   ======================================================= */
 
   return (
@@ -2828,7 +2873,7 @@ function AuctionHome() {
 }
 
 /* =========================================================
-   APP
+APP
 ========================================================= */
 
 function App() {

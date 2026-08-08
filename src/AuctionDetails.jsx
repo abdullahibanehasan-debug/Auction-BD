@@ -16,9 +16,10 @@ import {
   Tag,
 } from "lucide-react";
 
-const API_URL =
+const API_URL = (
   import.meta.env.VITE_API_URL ||
-  "https://auction-bd.onrender.com";
+  "https://auction-bd.onrender.com"
+).replace(/\/+$/, "");
 
 const TOKEN_KEY = "auctionbd_token";
 const USER_KEY = "auctionbd_user";
@@ -30,6 +31,10 @@ const FALLBACK_IMAGE =
 const money = (value = 0) =>
   `৳${Number(value || 0).toLocaleString("en-BD")}`;
 
+/* =========================================================
+AUTH
+========================================================= */
+
 function getAuth() {
   try {
     return {
@@ -39,7 +44,10 @@ function getAuth() {
       ),
     };
   } catch {
-    return { token: "", user: null };
+    return {
+      token: "",
+      user: null,
+    };
   }
 }
 
@@ -50,24 +58,37 @@ function clearAuth() {
   } catch {}
 }
 
+/* =========================================================
+THEME
+========================================================= */
+
 function getInitialTheme() {
   try {
-    return (
-      localStorage.getItem(THEME_KEY) ||
-      (window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light")
-    );
+    const saved = localStorage.getItem(THEME_KEY);
+
+    if (saved === "dark" || saved === "light") {
+      return saved;
+    }
+
+    return window.matchMedia?.(
+      "(prefers-color-scheme: dark)"
+    ).matches
+      ? "dark"
+      : "light";
   } catch {
     return "light";
   }
 }
 
 function applyTheme(theme) {
+  const isDark = theme === "dark";
+
   document.documentElement.classList.toggle(
     "dark",
-    theme === "dark"
+    isDark
   );
+
+  document.documentElement.style.colorScheme = theme;
 
   try {
     localStorage.setItem(THEME_KEY, theme);
@@ -75,7 +96,25 @@ function applyTheme(theme) {
 }
 
 /* =========================================================
-   MAIN
+API RESPONSE
+========================================================= */
+
+async function parseResponse(response) {
+  const text = await response.text();
+
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      message: text,
+    };
+  }
+}
+
+/* =========================================================
+MAIN
 ========================================================= */
 
 function AuctionDetails({
@@ -83,23 +122,38 @@ function AuctionDetails({
   onBack,
   onLogin,
 }) {
-  const [auctionData, setAuctionData] = useState(
-    auction || null
-  );
+  const [auctionData, setAuctionData] =
+    useState(auction || null);
 
-  const [bidHistory, setBidHistory] = useState([]);
-  const [bidAmount, setBidAmount] = useState("");
+  const [bidHistory, setBidHistory] =
+    useState([]);
 
-  const [loading, setLoading] = useState(true);
-  const [placingBid, setPlacingBid] = useState(false);
+  const [bidAmount, setBidAmount] =
+    useState("");
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [loading, setLoading] =
+    useState(true);
 
-  const [theme, setTheme] = useState(getInitialTheme);
+  const [placingBid, setPlacingBid] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [success, setSuccess] =
+    useState("");
+
+  const [theme, setTheme] =
+    useState(getInitialTheme);
+
+  const [selectedImage, setSelectedImage] =
+    useState(0);
 
   const auctionId =
-    auctionData?._id || auctionData?.id;
+    auctionData?._id ||
+    auctionData?.id ||
+    auction?._id ||
+    auction?.id;
 
   const currentPrice = Number(
     auctionData?.price || 0
@@ -115,6 +169,10 @@ function AuctionDetails({
     "cancelled",
   ].includes(status);
 
+  /* =======================================================
+  IMAGES
+  ======================================================= */
+
   const images = useMemo(() => {
     const list = [];
 
@@ -122,32 +180,83 @@ function AuctionDetails({
       list.push(auctionData.image);
     }
 
-    if (Array.isArray(auctionData?.images)) {
+    if (
+      Array.isArray(auctionData?.images)
+    ) {
       list.push(...auctionData.images);
     }
 
-    return [...new Set(list.filter(Boolean))];
+    const validImages = list.filter(
+      (image) =>
+        typeof image === "string" &&
+        image.trim()
+    );
+
+    return [
+      ...new Set(validImages),
+    ];
   }, [auctionData]);
 
-  const [selectedImage, setSelectedImage] =
-    useState(0);
-
   /* =======================================================
-     THEME
+  THEME INIT + SYNC
   ======================================================= */
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
 
-  const toggleTheme = () => {
-    setTheme((current) =>
-      current === "dark" ? "light" : "dark"
+  useEffect(() => {
+    const handleThemeChange = (event) => {
+      const nextTheme =
+        event?.detail?.theme;
+
+      if (
+        nextTheme === "dark" ||
+        nextTheme === "light"
+      ) {
+        setTheme(nextTheme);
+      }
+    };
+
+    window.addEventListener(
+      "auctionbd-theme-change",
+      handleThemeChange
     );
+
+    return () => {
+      window.removeEventListener(
+        "auctionbd-theme-change",
+        handleThemeChange
+      );
+    };
+  }, []);
+
+  const toggleTheme = () => {
+    setTheme((current) => {
+      const next =
+        current === "dark"
+          ? "light"
+          : "dark";
+
+      applyTheme(next);
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "auctionbd-theme-change",
+          {
+            detail: {
+              theme: next,
+            },
+          }
+        )
+      );
+
+      return next;
+    });
   };
 
   /* =======================================================
-     LOAD AUCTION
+  LOAD AUCTION
   ======================================================= */
 
   async function loadAuction() {
@@ -164,6 +273,7 @@ function AuctionDetails({
       const response = await fetch(
         `${API_URL}/api/auctions/${auctionId}`,
         {
+          method: "GET",
           headers: {
             Accept: "application/json",
           },
@@ -171,31 +281,54 @@ function AuctionDetails({
         }
       );
 
-      const data = await response
-        .json()
-        .catch(() => ({}));
+      const data =
+        await parseResponse(response);
 
       if (!response.ok) {
         throw new Error(
           data?.message ||
+            data?.error ||
             `Failed to load auction (${response.status}).`
         );
       }
 
+      const rawAuction =
+        data?.auction ||
+        data?.data ||
+        data;
+
+      if (
+        !rawAuction ||
+        typeof rawAuction !== "object"
+      ) {
+        throw new Error(
+          "Invalid auction data received from server."
+        );
+      }
+
       const normalized = {
-        ...data,
-        id: data?._id || data?.id,
+        ...rawAuction,
+        id:
+          rawAuction?._id ||
+          rawAuction?.id,
       };
 
       setAuctionData(normalized);
 
-      setBidHistory(
-        Array.isArray(data?.bidHistory)
-          ? data.bidHistory
-          : Array.isArray(data?.bidsHistory)
-          ? data.bidsHistory
-          : []
-      );
+      const history =
+        Array.isArray(
+          rawAuction?.bidHistory
+        )
+          ? rawAuction.bidHistory
+          : Array.isArray(
+              rawAuction?.bidsHistory
+            )
+          ? rawAuction.bidsHistory
+          : [];
+
+      setBidHistory(history);
+
+      setSelectedImage(0);
     } catch (err) {
       console.error(
         "Auction details error:",
@@ -213,10 +346,13 @@ function AuctionDetails({
 
   useEffect(() => {
     loadAuction();
-  }, [auction?.id, auction?._id]);
+  }, [
+    auction?.id,
+    auction?._id,
+  ]);
 
   /* =======================================================
-     PLACE BID
+  PLACE BID
   ======================================================= */
 
   async function handleBid(event) {
@@ -225,10 +361,18 @@ function AuctionDetails({
     setError("");
     setSuccess("");
 
-    const { token, user } = getAuth();
+    const { token, user } =
+      getAuth();
 
     if (!token || !user) {
       onLogin?.();
+      return;
+    }
+
+    if (!auctionId) {
+      setError(
+        "Auction ID is missing."
+      );
       return;
     }
 
@@ -239,7 +383,9 @@ function AuctionDetails({
       return;
     }
 
-    const amount = Number(bidAmount);
+    const amount = Number(
+      bidAmount
+    );
 
     if (
       !Number.isFinite(amount) ||
@@ -256,26 +402,33 @@ function AuctionDetails({
     try {
       setPlacingBid(true);
 
-      const response = await fetch(
-        `${API_URL}/api/auctions/${auctionId}/bids`,
-        {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            amount,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          `${API_URL}/api/auctions/${auctionId}/bids`,
+          {
+            method: "POST",
+            headers: {
+              Accept:
+                "application/json",
+              "Content-Type":
+                "application/json",
+              Authorization:
+                `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              amount,
+            }),
+          }
+        );
 
-      const data = await response
-        .json()
-        .catch(() => ({}));
+      const data =
+        await parseResponse(
+          response
+        );
 
-      if (response.status === 401) {
+      if (
+        response.status === 401
+      ) {
         clearAuth();
 
         setError(
@@ -289,24 +442,9 @@ function AuctionDetails({
       if (!response.ok) {
         throw new Error(
           data?.message ||
+            data?.error ||
             `Failed to place bid (${response.status}).`
         );
-      }
-
-      if (data?.auction) {
-        setAuctionData({
-          ...data.auction,
-          id:
-            data.auction._id ||
-            data.auction.id,
-        });
-      }
-
-      if (data?.bid) {
-        setBidHistory((current) => [
-          data.bid,
-          ...current,
-        ]);
       }
 
       setBidAmount("");
@@ -315,11 +453,17 @@ function AuctionDetails({
         "Your bid was placed successfully!"
       );
 
-      if (!data?.auction && !data?.bid) {
-        await loadAuction();
-      }
+      /*
+       * Always reload from the server.
+       * This keeps price, bid count and
+       * bid history synchronized with MongoDB.
+       */
+      await loadAuction();
     } catch (err) {
-      console.error("Bid error:", err);
+      console.error(
+        "Bid error:",
+        err
+      );
 
       setError(
         err?.message ||
@@ -331,12 +475,21 @@ function AuctionDetails({
   }
 
   /* =======================================================
-     LOADING
+  PAGE CLASS
+  ======================================================= */
+
+  const pageClass =
+    theme === "dark"
+      ? "min-h-screen bg-slate-950 text-white transition-colors duration-200"
+      : "min-h-screen bg-white text-gray-900 transition-colors duration-200";
+
+  /* =======================================================
+  LOADING
   ======================================================= */
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white text-gray-900 transition-colors dark:bg-slate-950 dark:text-white">
+      <div className={pageClass}>
         <DetailsHeader
           theme={theme}
           toggleTheme={toggleTheme}
@@ -365,12 +518,15 @@ function AuctionDetails({
   }
 
   /* =======================================================
-     ERROR
+  ERROR
   ======================================================= */
 
-  if (error && !auctionData?.title) {
+  if (
+    error &&
+    !auctionData?.title
+  ) {
     return (
-      <div className="min-h-screen bg-white text-gray-900 transition-colors dark:bg-slate-950 dark:text-white">
+      <div className={pageClass}>
         <DetailsHeader
           theme={theme}
           toggleTheme={toggleTheme}
@@ -420,8 +576,12 @@ function AuctionDetails({
     images[0] ||
     FALLBACK_IMAGE;
 
+  /* =======================================================
+  MAIN PAGE
+  ======================================================= */
+
   return (
-    <div className="min-h-screen bg-white text-gray-900 transition-colors dark:bg-slate-950 dark:text-white">
+    <div className={pageClass}>
       <DetailsHeader
         theme={theme}
         toggleTheme={toggleTheme}
@@ -429,8 +589,6 @@ function AuctionDetails({
       />
 
       <main className="mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-10">
-        {/* BACK */}
-
         <button
           type="button"
           onClick={onBack}
@@ -480,7 +638,8 @@ function AuctionDetails({
                     ? "SOLD"
                     : status === "ended"
                     ? "AUCTION ENDED"
-                    : status === "cancelled"
+                    : status ===
+                      "cancelled"
                     ? "CANCELLED"
                     : "LIVE AUCTION"}
                 </div>
@@ -489,32 +648,42 @@ function AuctionDetails({
 
             {images.length > 1 && (
               <div className="mt-3 grid grid-cols-5 gap-3">
-                {images.slice(0, 5).map(
-                  (image, index) => (
-                    <button
-                      key={`${image}-${index}`}
-                      type="button"
-                      onClick={() =>
-                        setSelectedImage(index)
-                      }
-                      className={`aspect-square overflow-hidden rounded-xl border-2 transition ${
-                        selectedImage === index
-                          ? "border-orange-500"
-                          : "border-gray-200 dark:border-white/10"
-                      }`}
-                    >
-                      <img
-                        src={image}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        onError={(event) => {
-                          event.currentTarget.src =
-                            FALLBACK_IMAGE;
-                        }}
-                      />
-                    </button>
-                  )
-                )}
+                {images
+                  .slice(0, 5)
+                  .map(
+                    (
+                      image,
+                      index
+                    ) => (
+                      <button
+                        key={`${image}-${index}`}
+                        type="button"
+                        onClick={() =>
+                          setSelectedImage(
+                            index
+                          )
+                        }
+                        className={`aspect-square overflow-hidden rounded-xl border-2 transition ${
+                          selectedImage ===
+                          index
+                            ? "border-orange-500"
+                            : "border-gray-200 dark:border-white/10"
+                        }`}
+                      >
+                        <img
+                          src={image}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={(
+                            event
+                          ) => {
+                            event.currentTarget.src =
+                              FALLBACK_IMAGE;
+                          }}
+                        />
+                      </button>
+                    )
+                  )}
               </div>
             )}
           </section>
@@ -570,7 +739,8 @@ function AuctionDetails({
                   </p>
 
                   <p className="text-xl font-black">
-                    {auctionData?.bids || 0}
+                    {auctionData?.bids ||
+                      0}
                   </p>
                 </div>
               </div>
@@ -601,7 +771,9 @@ function AuctionDetails({
                 <InfoCard
                   icon={MapPin}
                   label="Location"
-                  value={auctionData.location}
+                  value={
+                    auctionData.location
+                  }
                 />
               )}
 
@@ -609,7 +781,9 @@ function AuctionDetails({
                 <InfoCard
                   icon={CheckCircle2}
                   label="Condition"
-                  value={auctionData.condition}
+                  value={
+                    auctionData.condition
+                  }
                 />
               )}
             </div>
@@ -635,9 +809,15 @@ function AuctionDetails({
             ) : (
               <BidBox
                 bidAmount={bidAmount}
-                setBidAmount={setBidAmount}
-                currentPrice={currentPrice}
-                placingBid={placingBid}
+                setBidAmount={
+                  setBidAmount
+                }
+                currentPrice={
+                  currentPrice
+                }
+                placingBid={
+                  placingBid
+                }
                 error={error}
                 success={success}
                 onSubmit={handleBid}
@@ -700,7 +880,10 @@ function AuctionDetails({
             <div className="overflow-hidden rounded-3xl border border-gray-200 dark:border-white/10">
               <div className="divide-y divide-gray-100 dark:divide-white/10">
                 {bidHistory.map(
-                  (bid, index) => (
+                  (
+                    bid,
+                    index
+                  ) => (
                     <div
                       key={
                         bid._id ||
@@ -711,13 +894,16 @@ function AuctionDetails({
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-500 dark:bg-orange-500/10">
-                          <User size={18} />
+                          <User
+                            size={18}
+                          />
                         </div>
 
                         <div className="min-w-0">
                           <p className="truncate font-semibold">
                             {bid.bidder ||
-                              bid.user?.name ||
+                              bid.user
+                                ?.name ||
                               "AuctionBD User"}
                           </p>
 
@@ -731,10 +917,13 @@ function AuctionDetails({
 
                       <div className="shrink-0 text-right">
                         <p className="font-black text-orange-500">
-                          {money(bid.amount)}
+                          {money(
+                            bid.amount
+                          )}
                         </p>
 
-                        {index === 0 && (
+                        {index ===
+                          0 && (
                           <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-emerald-500">
                             Highest bid
                           </p>
@@ -753,7 +942,7 @@ function AuctionDetails({
 }
 
 /* =========================================================
-   HEADER
+HEADER
 ========================================================= */
 
 function DetailsHeader({
@@ -763,14 +952,14 @@ function DetailsHeader({
 }) {
   return (
     <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-white/10 dark:bg-slate-950/95">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-2"
+          className="flex items-center gap-3"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white">
-            <Gavel size={19} />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-sm font-black text-white shadow-lg shadow-orange-500/20">
+            A
           </div>
 
           <div className="text-left">
@@ -792,6 +981,11 @@ function DetailsHeader({
             type="button"
             onClick={toggleTheme}
             title={
+              theme === "dark"
+                ? "Switch to light mode"
+                : "Switch to dark mode"
+            }
+            aria-label={
               theme === "dark"
                 ? "Switch to light mode"
                 : "Switch to dark mode"
@@ -819,7 +1013,7 @@ function DetailsHeader({
 }
 
 /* =========================================================
-   BID BOX
+BID BOX
 ========================================================= */
 
 function BidBox({
@@ -832,14 +1026,15 @@ function BidBox({
   onSubmit,
   onLogin,
 }) {
-  const { token, user } = getAuth();
+  const { token, user } =
+    getAuth();
 
   if (!token || !user) {
     return (
       <div className="mt-6 rounded-3xl border border-gray-200 bg-gray-50 p-6 dark:border-white/10 dark:bg-white/[0.03]">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-50 text-orange-500 dark:bg-orange-500/10">
-            <LogIn size={20} />
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-500 dark:bg-orange-500/10">
+            <LogIn size={18} />
           </div>
 
           <div>
@@ -932,7 +1127,9 @@ function BidBox({
             required
             value={bidAmount}
             onChange={(event) =>
-              setBidAmount(event.target.value)
+              setBidAmount(
+                event.target.value
+              )
             }
             placeholder={`More than ${currentPrice.toLocaleString(
               "en-BD"
@@ -979,7 +1176,7 @@ function BidBox({
 }
 
 /* =========================================================
-   INFO CARD
+INFO CARD
 ========================================================= */
 
 function InfoCard({
@@ -988,17 +1185,16 @@ function InfoCard({
   value,
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-white/[0.03]">
-      <Icon
-        size={18}
-        className="text-orange-500"
-      />
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+      <div className="flex items-center gap-2 text-orange-500">
+        <Icon size={17} />
 
-      <p className="mt-3 text-xs text-gray-400 dark:text-slate-500">
-        {label}
-      </p>
+        <span className="text-xs font-semibold">
+          {label}
+        </span>
+      </div>
 
-      <p className="mt-1 truncate font-bold">
+      <p className="mt-3 truncate font-bold">
         {value}
       </p>
     </div>
@@ -1006,7 +1202,7 @@ function InfoCard({
 }
 
 /* =========================================================
-   TRUST
+TRUST
 ========================================================= */
 
 function Trust({
@@ -1014,10 +1210,10 @@ function Trust({
   text,
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center dark:border-white/10 dark:bg-white/[0.03]">
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 text-center dark:border-white/10 dark:bg-white/[0.03]">
       <Icon
-        size={19}
-        className="mx-auto text-orange-500"
+        size={18}
+        className="mx-auto text-emerald-500"
       />
 
       <p className="mt-1 text-[11px] font-semibold text-gray-500 dark:text-slate-500">
@@ -1028,14 +1224,15 @@ function Trust({
 }
 
 /* =========================================================
-   NOTICE
+NOTICE
 ========================================================= */
 
 function Notice({
   type,
   children,
 }) {
-  const isSuccess = type === "success";
+  const isSuccess =
+    type === "success";
 
   return (
     <div
@@ -1063,7 +1260,7 @@ function Notice({
 }
 
 /* =========================================================
-   DATE
+DATE
 ========================================================= */
 
 function formatBidDate(date) {
@@ -1071,14 +1268,21 @@ function formatBidDate(date) {
 
   const parsed = new Date(date);
 
-  if (Number.isNaN(parsed.getTime())) {
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
     return "";
   }
 
-  return parsed.toLocaleString("en-BD", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return parsed.toLocaleString(
+    "en-BD",
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }
+  );
 }
 
 export default AuctionDetails;

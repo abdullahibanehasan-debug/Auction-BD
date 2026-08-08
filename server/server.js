@@ -21,46 +21,69 @@ const PORT = Number(process.env.PORT) || 5000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/* =========================
-   SECURITY
-========================= */
+/* =========================================================
+   SERVER
+========================================================= */
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
-/* =========================
+/* =========================================================
    CORS
-========================= */
+========================================================= */
 
 const allowedOrigins = [
   process.env.CLIENT_URL,
   "https://auction-bd-frontend.onrender.com",
   "http://localhost:5173",
+  "http://127.0.0.1:5173",
 ].filter(Boolean);
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow server-to-server requests, Postman, Render health checks, etc.
+      if (!origin) {
         return callback(null, true);
       }
 
-      console.log("Blocked CORS origin:", origin);
-      return callback(new Error("Not allowed by CORS"));
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`CORS blocked: ${origin}`);
+
+      // Don't crash the server because of a bad browser origin.
+      return callback(null, false);
     },
+
     credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
+
     allowedHeaders: [
       "Content-Type",
       "Authorization",
       "X-Admin-Key",
     ],
+
+    optionsSuccessStatus: 204,
   })
 );
 
-/* =========================
-   REQUEST BODY
-========================= */
+/* Make sure browser preflight requests are handled. */
+app.options("*", cors());
+
+/* =========================================================
+   BODY PARSING
+========================================================= */
 
 app.use(
   express.json({
@@ -75,13 +98,21 @@ app.use(
   })
 );
 
-/* =========================
+/* =========================================================
    SECURITY HEADERS
-========================= */
+========================================================= */
 
 app.use((req, res, next) => {
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader(
+    "X-Content-Type-Options",
+    "nosniff"
+  );
+
+  res.setHeader(
+    "X-Frame-Options",
+    "DENY"
+  );
+
   res.setHeader(
     "Referrer-Policy",
     "strict-origin-when-cross-origin"
@@ -90,157 +121,311 @@ app.use((req, res, next) => {
   next();
 });
 
-/* =========================
-   UPLOADS
-========================= */
+/* =========================================================
+   REQUEST LOGGING
+   Helpful when debugging Render/API endpoint problems.
+========================================================= */
+
+app.use((req, res, next) => {
+  const started = Date.now();
+
+  res.on("finish", () => {
+    const duration = Date.now() - started;
+
+    console.log(
+      `${req.method} ${req.originalUrl} -> ${res.statusCode} (${duration}ms)`
+    );
+  });
+
+  next();
+});
+
+/* =========================================================
+   STATIC UPLOADS
+========================================================= */
 
 app.use(
   "/uploads",
-  express.static(path.join(__dirname, "uploads"))
+  express.static(
+    path.join(__dirname, "uploads")
+  )
 );
 
-/* =========================
-   HEALTH
-========================= */
+/* =========================================================
+   HEALTH CHECK
+========================================================= */
 
 app.get("/api/health", (req, res) => {
-  res.json({
+  const database =
+    mongoose.connection.readyState === 1
+      ? "connected"
+      : "disconnected";
+
+  res.status(200).json({
     status: "ok",
-    database:
-      mongoose.connection.readyState === 1
-        ? "connected"
-        : "disconnected",
+    server: "AuctionBD API",
+    database,
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
   });
 });
 
-/* =========================
+/* =========================================================
    API ROOT
-========================= */
+========================================================= */
 
-app.get("/", (req, res) => {
-  res.json({
+app.get("/api", (req, res) => {
+  res.status(200).json({
     name: "AuctionBD API",
     version: "1.0.0",
     status: "running",
+    database:
+      mongoose.connection.readyState === 1
+        ? "connected"
+        : "disconnected",
+
+    routes: {
+      auth: "/api/auth",
+      auctions: "/api/auctions",
+      admin: "/api/admin",
+      sellers: "/api/seller-requests",
+    },
   });
 });
 
-/* =========================
+/* =========================================================
+   SERVER ROOT
+========================================================= */
+
+app.get("/", (req, res) => {
+  res.status(200).json({
+    name: "AuctionBD API",
+    status: "running",
+    health: "/api/health",
+    api: "/api",
+  });
+});
+
+/* =========================================================
    API ROUTES
-========================= */
-
-app.use("/api/auth", authRoutes);
-
-app.use("/api/auctions", auctionRoutes);
-
-app.use("/api/admin", adminRoutes);
+========================================================= */
 
 /*
-  IMPORTANT:
-  Your frontend uses:
+  Authentication
 
+  Example:
+  POST /api/auth/login
+  POST /api/auth/register
+*/
+app.use(
+  "/api/auth",
+  authRoutes
+);
+
+/*
+  Auctions
+
+  Examples:
+  GET  /api/auctions
+  GET  /api/auctions/:id
+  POST /api/auctions
+  POST /api/auctions/:id/bids
+*/
+app.use(
+  "/api/auctions",
+  auctionRoutes
+);
+
+/*
+  Admin
+*/
+app.use(
+  "/api/admin",
+  adminRoutes
+);
+
+/*
+  Seller requests
+
+  Frontend:
   /api/seller-requests
   /api/seller-requests/mine
-
-  So the router MUST be mounted here.
 */
-app.use("/api/seller-requests", sellerRoutes);
+app.use(
+  "/api/seller-requests",
+  sellerRoutes
+);
 
 /*
-  Keep the old route too so older frontend code
-  doesn't suddenly break.
-*/
-app.use("/api/sellers", sellerRoutes);
+  Backward compatibility.
 
-/* =========================
-   404
-========================= */
+  Older frontend code may still use:
+  /api/sellers
+*/
+app.use(
+  "/api/sellers",
+  sellerRoutes
+);
+
+/* =========================================================
+   404 API HANDLER
+========================================================= */
 
 app.use((req, res) => {
+  console.warn(
+    `404 API endpoint: ${req.method} ${req.originalUrl}`
+  );
+
   res.status(404).json({
+    success: false,
     message: "API endpoint not found.",
+    method: req.method,
     path: req.originalUrl,
   });
 });
 
-/* =========================
-   ERROR HANDLER
-========================= */
+/* =========================================================
+   GLOBAL ERROR HANDLER
+========================================================= */
 
 app.use((error, req, res, next) => {
-  console.error("Server error:", error);
+  console.error(
+    "Unhandled server error:",
+    error
+  );
+
+  if (res.headersSent) {
+    return next(error);
+  }
 
   res.status(error.status || 500).json({
+    success: false,
+
     message:
       process.env.NODE_ENV === "production"
         ? "Internal server error."
-        : error.message || "Internal server error.",
+        : error.message ||
+          "Internal server error.",
   });
 });
 
-/* =========================
+/* =========================================================
    DATABASE
-========================= */
+========================================================= */
 
 async function connectDatabase() {
-  if (!process.env.MONGO_URI) {
+  const mongoUri = process.env.MONGO_URI;
+
+  if (!mongoUri) {
     throw new Error(
       "MONGO_URI is missing from environment variables."
     );
   }
 
-  await mongoose.connect(process.env.MONGO_URI, {
-    serverSelectionTimeoutMS: 10000,
-    maxPoolSize: 10,
-    minPoolSize: 2,
-  });
+  mongoose.set(
+    "strictQuery",
+    true
+  );
 
-  console.log("MongoDB connected successfully ✅");
+  await mongoose.connect(
+    mongoUri,
+    {
+      serverSelectionTimeoutMS: 15000,
+      socketTimeoutMS: 45000,
+
+      maxPoolSize: 10,
+      minPoolSize: 2,
+
+      family: 4,
+    }
+  );
+
+  console.log(
+    "MongoDB connected successfully ✅"
+  );
 }
 
-/* =========================
+/* =========================================================
    START SERVER
-========================= */
+========================================================= */
 
 async function startServer() {
   try {
     await connectDatabase();
 
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(
-        `AuctionBD API running on port ${PORT} 🚀`
-      );
+    app.listen(
+      PORT,
+      "0.0.0.0",
+      () => {
+        console.log(
+          "========================================"
+        );
 
-      console.log(
-        `Local API: http://localhost:${PORT}`
-      );
-    });
+        console.log(
+          `AuctionBD API running on port ${PORT} 🚀`
+        );
+
+        console.log(
+          `Local API: http://localhost:${PORT}`
+        );
+
+        console.log(
+          `Health: http://localhost:${PORT}/api/health`
+        );
+
+        console.log(
+          "========================================"
+        );
+      }
+    );
   } catch (error) {
-    console.error("Server startup failed ❌", error);
+    console.error(
+      "Server startup failed ❌"
+    );
+
+    console.error(error);
+
     process.exit(1);
   }
 }
 
-/* =========================
+/* =========================================================
    GRACEFUL SHUTDOWN
-========================= */
+========================================================= */
 
 async function shutdown(signal) {
-  console.log(`${signal}: shutting down...`);
+  console.log(
+    `${signal}: shutting down...`
+  );
 
   try {
     await mongoose.connection.close();
-    console.log("MongoDB connection closed.");
+
+    console.log(
+      "MongoDB connection closed."
+    );
   } catch (error) {
-    console.error("Error closing MongoDB:", error);
+    console.error(
+      "Error closing MongoDB:",
+      error
+    );
   } finally {
     process.exit(0);
   }
 }
 
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on(
+  "SIGINT",
+  () => shutdown("SIGINT")
+);
+
+process.on(
+  "SIGTERM",
+  () => shutdown("SIGTERM")
+);
+
+/* =========================================================
+   START
+========================================================= */
 
 startServer();
