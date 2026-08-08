@@ -19,7 +19,6 @@ import {
   AlertCircle,
   Loader2,
   Package,
-  LogIn,
 } from "lucide-react";
 
 const API_URL =
@@ -42,10 +41,6 @@ const FALLBACK_IMAGE =
 const FAVORITES_KEY = "auctionbd_favorites";
 const TOKEN_KEY = "auctionbd_token";
 const USER_KEY = "auctionbd_user";
-
-/* =========================
-   AUTH HELPERS
-========================= */
 
 const getToken = () => {
   try {
@@ -75,10 +70,6 @@ const clearAuth = () => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
 };
-
-/* =========================
-   API
-========================= */
 
 const api = async (path, options = {}) => {
   const token = getToken();
@@ -120,10 +111,6 @@ const api = async (path, options = {}) => {
   return data;
 };
 
-/* =========================
-   HELPERS
-========================= */
-
 const normalizeAuction = (auction) => ({
   ...auction,
   id: auction._id || auction.id,
@@ -132,7 +119,7 @@ const normalizeAuction = (auction) => ({
   status: String(auction.status || "active").toLowerCase(),
 });
 
-const statusInfo = (status) => {
+function statusInfo(status) {
   if (status === "sold") {
     return {
       label: "SOLD",
@@ -158,7 +145,7 @@ const statusInfo = (status) => {
     label: "LIVE",
     color: "bg-red-500",
   };
-};
+}
 
 /* =========================
    AUCTION CARD
@@ -203,7 +190,9 @@ function AuctionCard({
         <button
           type="button"
           aria-label={
-            favorite ? "Remove favorite" : "Add favorite"
+            favorite
+              ? "Remove favorite"
+              : "Add favorite"
           }
           onClick={(e) => {
             e.stopPropagation();
@@ -217,7 +206,9 @@ function AuctionCard({
         >
           <Heart
             size={17}
-            fill={favorite ? "currentColor" : "none"}
+            fill={
+              favorite ? "currentColor" : "none"
+            }
           />
         </button>
       </div>
@@ -247,8 +238,13 @@ function AuctionCard({
           </div>
 
           <div className="text-right">
-            <p className="text-xs text-slate-500">Bids</p>
-            <p className="font-semibold">{auction.bids}</p>
+            <p className="text-xs text-slate-500">
+              Bids
+            </p>
+
+            <p className="font-semibold">
+              {auction.bids}
+            </p>
           </div>
         </div>
 
@@ -284,8 +280,9 @@ function Skeleton() {
 
       <div className="space-y-4 p-5">
         <div className="h-3 w-20 animate-pulse rounded bg-white/10" />
-        <div className="h-5 w-3/4 animate-pulse rounded bg-white/10" />
+        <div className="h-6 w-4/5 animate-pulse rounded bg-white/10" />
         <div className="h-8 w-1/2 animate-pulse rounded bg-white/10" />
+        <div className="h-4 w-full animate-pulse rounded bg-white/10" />
       </div>
     </div>
   );
@@ -295,12 +292,20 @@ function Skeleton() {
    AUTH MODAL
 ========================= */
 
-function AuthModal({ mode, onClose, onSuccess }) {
-  const [loginMode, setLoginMode] = useState(mode === "login");
+function AuthModal({
+  mode,
+  onClose,
+  onSuccess,
+}) {
+  const [loginMode, setLoginMode] = useState(
+    mode === "login"
+  );
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -343,14 +348,18 @@ function AuthModal({ mode, onClose, onSuccess }) {
         );
       }
 
-      const user = data.user || data.account || null;
+      const user =
+        data.user ||
+        data.account ||
+        null;
 
       saveAuth(token, user);
 
       onSuccess(user);
     } catch (err) {
       setError(
-        err.message || "Authentication failed."
+        err.message ||
+          "Authentication failed."
       );
     } finally {
       setLoading(false);
@@ -359,19 +368,17 @@ function AuthModal({ mode, onClose, onSuccess }) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
       }}
     >
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-slate-950 p-6 shadow-2xl">
-        <div className="mb-6 flex items-start justify-between">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-slate-950 p-6 shadow-2xl sm:p-8">
+        <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-bold text-amber-400">
-              AUCTIONBD
-            </p>
-
-            <h2 className="mt-1 text-2xl font-black">
+            <h2 className="text-2xl font-black">
               {loginMode
                 ? "Welcome back"
                 : "Create account"}
@@ -394,15 +401,18 @@ function AuthModal({ mode, onClose, onSuccess }) {
         </div>
 
         {error && (
-          <div className="mb-5 flex gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
-            <AlertCircle size={18} className="shrink-0" />
+          <div className="mt-5 flex gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+            <AlertCircle
+              size={18}
+              className="shrink-0"
+            />
             <span>{error}</span>
           </div>
         )}
 
         <form
           onSubmit={submit}
-          className="space-y-4"
+          className="mt-6 space-y-4"
         >
           {!loginMode && (
             <>
@@ -451,8 +461,9 @@ function AuthModal({ mode, onClose, onSuccess }) {
           />
 
           <button
+            type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 font-bold text-black hover:bg-amber-300 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 font-bold text-black disabled:opacity-50"
           >
             {loading && (
               <Loader2
@@ -507,9 +518,11 @@ function SellerPage({
   const [images, setImages] = useState([]);
   const [videos, setVideos] = useState([]);
   const [requests, setRequests] = useState([]);
+
   const [loading, setLoading] = useState(false);
   const [loadingRequests, setLoadingRequests] =
     useState(false);
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -575,13 +588,13 @@ function SellerPage({
         }
       );
 
-      images.forEach((file) =>
-        body.append("images", file)
-      );
+      images.forEach((file) => {
+        body.append("images", file);
+      });
 
-      videos.forEach((file) =>
-        body.append("videos", file)
-      );
+      videos.forEach((file) => {
+        body.append("videos", file);
+      });
 
       await api("/api/seller-requests", {
         method: "POST",
@@ -616,23 +629,21 @@ function SellerPage({
 
       loadRequests();
     } catch (err) {
-      const text = String(
-        err.message || ""
-      ).toLowerCase();
-
       if (
-        text.includes("login") ||
-        text.includes("session") ||
-        text.includes("token") ||
-        text.includes("unauthorized")
+        err.message
+          ?.toLowerCase()
+          .includes("login") ||
+        err.message
+          ?.toLowerCase()
+          .includes("session") ||
+        err.message
+          ?.toLowerCase()
+          .includes("token")
       ) {
         clearAuth();
         onLogin();
       } else {
-        setError(
-          err.message ||
-            "Unable to submit auction request."
-        );
+        setError(err.message);
       }
     } finally {
       setLoading(false);
@@ -641,7 +652,7 @@ function SellerPage({
 
   if (!user && !getToken()) {
     return (
-      <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+      <main className="mx-auto max-w-3xl px-6 py-16">
         <button
           onClick={onBack}
           className="mb-8 text-sm text-slate-400 hover:text-white"
@@ -676,7 +687,7 @@ function SellerPage({
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
+    <main className="mx-auto max-w-7xl px-6 py-10">
       <button
         onClick={onBack}
         className="mb-8 text-sm text-slate-400 hover:text-white"
@@ -717,7 +728,7 @@ function SellerPage({
 
           <form
             onSubmit={submit}
-            className="space-y-5 rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6"
+            className="space-y-5 rounded-3xl border border-white/10 bg-white/[0.03] p-6"
           >
             <input
               required
@@ -761,7 +772,9 @@ function SellerPage({
                 {CATEGORIES.filter(
                   (x) => x !== "All"
                 ).map((x) => (
-                  <option key={x}>{x}</option>
+                  <option key={x}>
+                    {x}
+                  </option>
                 ))}
               </select>
             </div>
@@ -840,7 +853,7 @@ function SellerPage({
                 onClick={() =>
                   imageInput.current?.click()
                 }
-                className="flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-white/15 bg-white/[0.02] p-8 text-center text-slate-400 hover:border-amber-400 hover:text-amber-400"
+                className="flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-white/15 bg-white/[0.02] p-8 text-slate-400 hover:border-amber-400 hover:text-amber-400"
               >
                 <Upload size={22} />
                 Choose photos from your phone
@@ -924,7 +937,7 @@ function SellerPage({
         </section>
 
         <aside>
-          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 lg:sticky lg:top-24">
+          <div className="sticky top-24 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
             <h2 className="text-xl font-bold">
               Your requests
             </h2>
@@ -955,12 +968,17 @@ function SellerPage({
                     <p className="mt-2 text-xs capitalize text-amber-400">
                       {String(
                         request.status
-                      ).replace("_", " ")}
+                      ).replace(
+                        "_",
+                        " "
+                      )}
                     </p>
 
                     {request.rejectionReason && (
                       <p className="mt-2 text-xs text-red-300">
-                        {request.rejectionReason}
+                        {
+                          request.rejectionReason
+                        }
                       </p>
                     )}
 
@@ -981,44 +999,30 @@ function SellerPage({
 }
 
 /* =========================
-   APP
-========================= */
-
-function App() {
-  const isAdmin =
-    new URLSearchParams(
-      window.location.search
-    ).get("admin") === "1";
-
-  if (isAdmin) {
-    return <AdminPanel />;
-  }
-
-  return <AuctionHome />;
-}
-
-/* =========================
-   HOME
+   MAIN APP
 ========================= */
 
 function AuctionHome() {
   const [auctions, setAuctions] = useState([]);
   const [selectedAuction, setSelectedAuction] =
     useState(null);
+
   const [page, setPage] = useState("home");
-  const [authMode, setAuthMode] =
-    useState(null);
-  const [user, setUser] =
-    useState(getSavedUser);
+  const [authMode, setAuthMode] = useState(null);
+
+  const [user, setUser] = useState(
+    getSavedUser
+  );
+
   const [search, setSearch] = useState("");
   const [category, setCategory] =
     useState("All");
-  const [loading, setLoading] =
-    useState(true);
+
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [favorites, setFavorites] =
-    useState(() => {
+  const [favorites, setFavorites] = useState(
+    () => {
       try {
         return JSON.parse(
           localStorage.getItem(
@@ -1028,7 +1032,8 @@ function AuctionHome() {
       } catch {
         return [];
       }
-    });
+    }
+  );
 
   const loadAuctions = useCallback(
     async () => {
@@ -1046,7 +1051,8 @@ function AuctionHome() {
           }
         );
 
-        const data = await response.json();
+        const data =
+          await response.json();
 
         if (!response.ok) {
           throw new Error(
@@ -1093,9 +1099,8 @@ function AuctionHome() {
   }, [favorites]);
 
   const filteredAuctions = useMemo(() => {
-    const term = search
-      .trim()
-      .toLowerCase();
+    const term =
+      search.trim().toLowerCase();
 
     return auctions.filter((auction) => {
       const searchable = [
@@ -1117,7 +1122,11 @@ function AuctionHome() {
             category)
       );
     });
-  }, [auctions, search, category]);
+  }, [
+    auctions,
+    search,
+    category,
+  ]);
 
   const toggleFavorite = useCallback(
     (id) => {
@@ -1145,7 +1154,6 @@ function AuctionHome() {
     clearAuth();
     setUser(null);
     setPage("home");
-    setSelectedAuction(null);
   };
 
   const openSeller = () => {
@@ -1162,17 +1170,10 @@ function AuctionHome() {
     });
   };
 
-  const openLogin = () => {
-    setAuthMode("login");
-  };
-
-  const openSignup = () => {
-    setAuthMode("signup");
-  };
-
-  /* =========================
-     AUCTION DETAILS
-  ========================= */
+  /* =================================
+     IMPORTANT FIX:
+     PASS onLogin TO AUCTION DETAILS
+  ================================= */
 
   if (selectedAuction) {
     return (
@@ -1182,14 +1183,12 @@ function AuctionHome() {
           setSelectedAuction(null);
           loadAuctions();
         }}
-        onLogin={openLogin}
+        onLogin={() => {
+          setAuthMode("login");
+        }}
       />
     );
   }
-
-  /* =========================
-     SELLER
-  ========================= */
 
   if (page === "seller") {
     return (
@@ -1202,10 +1201,15 @@ function AuctionHome() {
             background: rgba(255,255,255,.05);
             padding: .75rem 1rem;
             outline: none;
+            color: white;
           }
 
           .field:focus {
             border-color: #fbbf24;
+          }
+
+          .field::placeholder {
+            color: #64748b;
           }
 
           select option {
@@ -1232,15 +1236,21 @@ function AuctionHome() {
               className="flex items-center gap-2 text-sm text-slate-400 hover:text-white"
             >
               <LogOut size={17} />
-              <span>Logout</span>
+              <span className="hidden sm:inline">
+                Logout
+              </span>
             </button>
           </div>
         </header>
 
         <SellerPage
           user={user}
-          onBack={() => setPage("home")}
-          onLogin={openLogin}
+          onBack={() =>
+            setPage("home")
+          }
+          onLogin={() =>
+            setAuthMode("login")
+          }
         />
 
         {authMode && (
@@ -1251,8 +1261,10 @@ function AuctionHome() {
             }
             onSuccess={(newUser) => {
               setUser(
-                newUser || getSavedUser()
+                newUser ||
+                  getSavedUser()
               );
+
               setAuthMode(null);
             }}
           />
@@ -1260,10 +1272,6 @@ function AuctionHome() {
       </div>
     );
   }
-
-  /* =========================
-     HOME UI
-  ========================= */
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -1275,6 +1283,7 @@ function AuctionHome() {
           background: rgba(255,255,255,.05);
           padding: .75rem 1rem;
           outline: none;
+          color: white;
         }
 
         .field:focus {
@@ -1291,9 +1300,7 @@ function AuctionHome() {
       ========================= */}
 
       <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-4">
-          {/* LOGO */}
-
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <button
             onClick={() =>
               window.scrollTo({
@@ -1301,11 +1308,11 @@ function AuctionHome() {
                 behavior: "smooth",
               })
             }
-            className="flex shrink-0 items-center gap-2 sm:gap-3"
+            className="flex items-center gap-2 sm:gap-3"
           >
             <Gavel
               className="text-amber-400"
-              size={23}
+              size={24}
             />
 
             <div className="text-left">
@@ -1322,12 +1329,13 @@ function AuctionHome() {
             </div>
           </button>
 
-          {/* DESKTOP NAV */}
-
           <nav className="hidden gap-7 md:flex">
             {[
               ["Auctions", "auctions"],
-              ["Categories", "categories"],
+              [
+                "Categories",
+                "categories",
+              ],
               ["How It Works", "how"],
             ].map(([name, id]) => (
               <button
@@ -1342,14 +1350,22 @@ function AuctionHome() {
             ))}
           </nav>
 
-          {/* AUTH / SELL BUTTONS */}
+          {/* =========================
+              AUTH / SELL BUTTONS
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+              MOBILE:
+              Sign Up | Sell
+
+              DESKTOP:
+              Login | Sell
+          ========================= */}
+
+          <div className="flex items-center gap-2">
             {user ? (
               <>
                 <button
                   onClick={openSeller}
-                  className="rounded-lg border border-amber-400/30 px-2.5 py-2 text-xs font-medium text-amber-400 hover:bg-amber-400/10 sm:px-3 sm:text-sm"
+                  className="rounded-lg border border-amber-400/30 px-3 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-400/10 sm:text-sm"
                 >
                   Sell Item
                 </button>
@@ -1364,26 +1380,29 @@ function AuctionHome() {
               </>
             ) : (
               <>
-                {/* MOBILE SIGN UP */}
-
+                {/* SIGN UP - ALWAYS VISIBLE */}
                 <button
-                  onClick={openSignup}
-                  className="rounded-lg border border-white/10 px-2.5 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 hover:text-white sm:px-3 sm:text-sm"
+                  onClick={() =>
+                    setAuthMode(
+                      "register"
+                    )
+                  }
+                  className="rounded-lg px-2 py-2 text-xs font-semibold text-slate-300 hover:text-white sm:px-3 sm:text-sm"
                 >
                   Sign Up
                 </button>
 
-                {/* DESKTOP LOGIN */}
-
+                {/* LOGIN - DESKTOP ONLY */}
                 <button
-                  onClick={openLogin}
-                  className="hidden px-3 py-2 text-sm text-slate-300 hover:text-white sm:block"
+                  onClick={() =>
+                    setAuthMode("login")
+                  }
+                  className="hidden rounded-lg px-3 py-2 text-sm text-slate-300 hover:text-white sm:block"
                 >
                   Login
                 </button>
 
                 {/* SELL */}
-
                 <button
                   onClick={openSeller}
                   className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-bold text-black hover:bg-amber-300 sm:px-4 sm:text-sm"
@@ -1400,13 +1419,13 @@ function AuctionHome() {
           HERO
       ========================= */}
 
-      <section className="mx-auto max-w-7xl px-5 py-16 sm:px-6 sm:py-20">
+      <section className="mx-auto max-w-7xl px-6 py-20">
         <div className="max-w-3xl">
           <div className="mb-5 inline-flex rounded-full bg-amber-400/10 px-4 py-2 text-sm text-amber-400">
             Live auctions happening now
           </div>
 
-          <h2 className="text-4xl font-black leading-tight sm:text-6xl">
+          <h2 className="text-5xl font-black sm:text-6xl">
             Find it.
             <br />
             <span className="text-amber-400">
@@ -1416,10 +1435,10 @@ function AuctionHome() {
             Make it yours.
           </h2>
 
-          <p className="mt-5 text-base text-slate-400 sm:text-lg">
+          <p className="mt-5 text-lg text-slate-400">
             Bangladesh&apos;s digital auction
-            marketplace. Discover products
-            and win amazing deals.
+            marketplace. Discover products and
+            win amazing deals.
           </p>
 
           <button
@@ -1438,21 +1457,23 @@ function AuctionHome() {
           SEARCH
       ========================= */}
 
-      <section className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="flex rounded-2xl border border-white/10 bg-white/5 p-2 sm:p-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3 px-2 sm:px-3">
+      <section className="mx-auto max-w-7xl px-6">
+        <div className="flex rounded-2xl border border-white/10 bg-white/5 p-3">
+          <div className="flex flex-1 items-center gap-3 px-3">
             <Search
               size={20}
-              className="shrink-0 text-slate-500"
+              className="text-slate-500"
             />
 
             <input
               value={search}
               onChange={(e) =>
-                setSearch(e.target.value)
+                setSearch(
+                  e.target.value
+                )
               }
               placeholder="Search auctions..."
-              className="w-full bg-transparent py-2 outline-none"
+              className="w-full bg-transparent outline-none"
             />
 
             {search && (
@@ -1489,7 +1510,7 @@ function AuctionHome() {
 
       <section
         id="auctions"
-        className="mx-auto max-w-7xl scroll-mt-24 px-4 py-14 sm:px-6 sm:py-16"
+        className="mx-auto max-w-7xl scroll-mt-24 px-6 py-16"
       >
         <div className="mb-8">
           <h3 className="text-3xl font-bold">
@@ -1499,7 +1520,8 @@ function AuctionHome() {
           {!loading && !error && (
             <p className="mt-1 text-sm text-slate-500">
               {filteredAuctions.length} auction
-              {filteredAuctions.length === 1
+              {filteredAuctions.length ===
+              1
                 ? ""
                 : "s"}{" "}
               available
@@ -1532,7 +1554,8 @@ function AuctionHome() {
 
         {!loading &&
           !error &&
-          filteredAuctions.length === 0 && (
+          filteredAuctions.length ===
+            0 && (
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-12 text-center">
               <Search
                 size={36}
@@ -1544,7 +1567,8 @@ function AuctionHome() {
               </h4>
 
               <p className="mt-2 text-slate-500">
-                Try another search or category.
+                Try another search or
+                category.
               </p>
 
               <button
@@ -1561,7 +1585,8 @@ function AuctionHome() {
 
         {!loading &&
           !error &&
-          filteredAuctions.length > 0 && (
+          filteredAuctions.length >
+            0 && (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {filteredAuctions.map(
                 (auction) => (
@@ -1592,7 +1617,7 @@ function AuctionHome() {
         id="categories"
         className="border-y border-white/10 bg-white/[0.02]"
       >
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16">
+        <div className="mx-auto max-w-7xl px-6 py-16">
           <h3 className="text-3xl font-bold">
             Categories
           </h3>
@@ -1624,7 +1649,7 @@ function AuctionHome() {
 
       <section
         id="how"
-        className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20"
+        className="mx-auto max-w-7xl px-6 py-20"
       >
         <h3 className="text-center text-3xl font-bold">
           How Auction BD Works
@@ -1656,9 +1681,9 @@ function AuctionHome() {
 
       <section
         id="sell"
-        className="mx-auto max-w-7xl scroll-mt-24 px-4 pb-16 sm:px-6 sm:pb-20"
+        className="mx-auto max-w-7xl scroll-mt-24 px-6 pb-20"
       >
-        <div className="rounded-3xl bg-amber-400 p-7 text-black sm:p-10">
+        <div className="rounded-3xl bg-amber-400 p-10 text-black">
           <h3 className="text-3xl font-black">
             Turn your item into an auction.
           </h3>
@@ -1682,7 +1707,7 @@ function AuctionHome() {
           FOOTER
       ========================= */}
 
-      <footer className="border-t border-white/10 px-4 py-8 sm:px-6">
+      <footer className="border-t border-white/10 px-6 py-8">
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-5 sm:flex-row">
           <b>
             AUCTION
@@ -1722,7 +1747,8 @@ function AuctionHome() {
           }
           onSuccess={(newUser) => {
             setUser(
-              newUser || getSavedUser()
+              newUser ||
+                getSavedUser()
             );
 
             setAuthMode(null);
@@ -1731,6 +1757,23 @@ function AuctionHome() {
       )}
     </div>
   );
+}
+
+/* =========================
+   APP
+========================= */
+
+function App() {
+  const isAdmin =
+    new URLSearchParams(
+      window.location.search
+    ).get("admin") === "1";
+
+  if (isAdmin) {
+    return <AdminPanel />;
+  }
+
+  return <AuctionHome />;
 }
 
 export default App;
