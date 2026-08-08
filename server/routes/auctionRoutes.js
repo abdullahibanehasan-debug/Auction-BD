@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 
 import Auction from "../models/Auction.js";
 import Bid from "../models/Bid.js";
+import { requireAuth } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -27,16 +28,14 @@ async function expireAuctions() {
       },
     },
     {
-      $set: {
-        status: "ended",
-      },
+      $set: { status: "ended" },
     }
   );
 }
 
-/* =========================================================
+/* =========================
    GET PUBLIC AUCTIONS
-   ========================================================= */
+========================= */
 
 router.get("/", async (req, res) => {
   try {
@@ -100,7 +99,6 @@ router.get("/", async (req, res) => {
       ];
     }
 
-    // Existing frontend can receive an array.
     if (!page && !limit) {
       const auctions = await Auction.find(filter)
         .sort({ createdAt: -1 })
@@ -157,9 +155,9 @@ router.get("/", async (req, res) => {
   }
 });
 
-/* =========================================================
+/* =========================
    GET SINGLE AUCTION
-   ========================================================= */
+========================= */
 
 router.get("/:id", async (req, res) => {
   try {
@@ -179,9 +177,7 @@ router.get("/:id", async (req, res) => {
           approved: true,
         },
         {
-          $inc: {
-            views: 1,
-          },
+          $inc: { views: 1 },
         },
         {
           new: true,
@@ -217,9 +213,9 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-/* =========================================================
+/* =========================
    CREATE AUCTION
-   ========================================================= */
+========================= */
 
 router.post("/", async (req, res) => {
   try {
@@ -284,7 +280,8 @@ router.post("/", async (req, res) => {
         startingPrice: starting,
         price: starting,
 
-        seller: clean(seller) ||
+        seller:
+          clean(seller) ||
           "AuctionBD User",
 
         sellerId: clean(sellerId),
@@ -301,7 +298,8 @@ router.post("/", async (req, res) => {
         endDate:
           endDate || null,
 
-        time: clean(time) || "Live",
+        time:
+          clean(time) || "Live",
 
         status: "active",
         approved: true,
@@ -323,28 +321,17 @@ router.post("/", async (req, res) => {
   }
 });
 
-/* =========================================================
+/* =========================
    PLACE BID
-   ========================================================= */
+   LOGIN REQUIRED
+========================= */
 
 router.post(
   "/:id/bids",
+  requireAuth,
   async (req, res) => {
     try {
       const { id } = req.params;
-
-      const bidder = clean(
-        req.body.bidder
-      );
-
-      const bidderId = clean(
-        req.body.bidderId
-      );
-
-      const bidderEmail = email(
-        req.body.bidderEmail
-      );
-
       const amount = Number(
         req.body.amount
       );
@@ -353,16 +340,6 @@ router.post(
         return res.status(400).json({
           message:
             "Invalid auction ID.",
-        });
-      }
-
-      if (
-        !bidder ||
-        bidder.length > 120
-      ) {
-        return res.status(400).json({
-          message:
-            "A valid bidder name is required.",
         });
       }
 
@@ -432,11 +409,29 @@ router.post(
       }
 
       /*
-       * Atomic update.
+       * IMPORTANT:
+       * Bidder information comes from
+       * the authenticated JWT.
        *
-       * This prevents two users from successfully
-       * placing the same/lower bid at the same time.
+       * We do NOT trust bidder information
+       * sent by the frontend.
        */
+
+      const bidder =
+        clean(req.user.name);
+
+      const bidderId =
+        req.user._id.toString();
+
+      const bidderEmail =
+        email(req.user.email);
+
+      /*
+       * Atomic update prevents two users
+       * from placing the same/lower bid
+       * at the same time.
+       */
+
       const updated =
         await Auction.findOneAndUpdate(
           {
@@ -482,11 +477,6 @@ router.post(
         });
       }
 
-      /*
-       * Permanent bid record.
-       * This gives us a proper bid collection
-       * for future users, winners, orders, etc.
-       */
       const savedBid =
         await Bid.create({
           auctionId: auction._id,
@@ -533,9 +523,9 @@ router.post(
   }
 );
 
-/* =========================================================
+/* =========================
    GET BID HISTORY
-   ========================================================= */
+========================= */
 
 router.get(
   "/:id/bids",
@@ -567,30 +557,23 @@ router.get(
         });
       }
 
-      const bids =
-        await Bid.find({
-          auctionId: id,
+      const bids = await Bid.find({
+        auctionId: id,
+      })
+        .sort({
+          createdAt: -1,
         })
-          .sort({
-            createdAt: -1,
-          })
-          .limit(100)
-          .lean();
-
-      /*
-       * Fallback keeps compatibility with
-       * auctions created before the Bid model
-       * was introduced.
-       */
-      const history =
-        bids.length
-          ? bids
-          : auction.bidHistory || [];
+        .limit(100)
+        .lean();
 
       res.json({
-        bids: history,
+        bids: bids.length
+          ? bids
+          : auction.bidHistory || [],
+
         total:
           auction.bids || 0,
+
         currentPrice:
           auction.price,
       });

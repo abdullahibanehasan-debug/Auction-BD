@@ -21,54 +21,138 @@ const PORT = Number(process.env.PORT) || 5000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Security
+/* =========================
+   SECURITY
+========================= */
+
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
-// CORS
+/* =========================
+   CORS
+========================= */
+
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  "https://auction-bd-frontend.onrender.com",
+  "http://localhost:5173",
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Admin-Key"],
+    origin: (origin, callback) => {
+      // Allow server-to-server / same-origin requests.
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.log("Blocked CORS origin:", origin);
+
+      return callback(
+        new Error("Not allowed by CORS")
+      );
+    },
+
+    credentials: true,
+
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
+
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Admin-Key",
+    ],
   })
 );
 
-// Request body
-app.use(express.json({ limit: "5mb" }));
-app.use(express.urlencoded({ extended: true, limit: "5mb" }));
+/* =========================
+   REQUEST BODY
+========================= */
 
-// Security headers
+app.use(
+  express.json({
+    limit: "5mb",
+  })
+);
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "5mb",
+  })
+);
+
+/* =========================
+   SECURITY HEADERS
+========================= */
+
 app.use((req, res, next) => {
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader(
+    "X-Content-Type-Options",
+    "nosniff"
+  );
+
+  res.setHeader(
+    "X-Frame-Options",
+    "DENY"
+  );
+
   res.setHeader(
     "Referrer-Policy",
     "strict-origin-when-cross-origin"
   );
+
   next();
 });
 
-// Uploaded seller images/videos
+/* =========================
+   UPLOADS
+========================= */
+
 app.use(
   "/uploads",
-  express.static(path.join(__dirname, "uploads"))
+  express.static(
+    path.join(__dirname, "uploads")
+  )
 );
 
-// Health check
+/* =========================
+   HEALTH CHECK
+========================= */
+
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
+
     database:
       mongoose.connection.readyState === 1
         ? "connected"
         : "disconnected",
-    uptime: Math.floor(process.uptime()),
-    timestamp: new Date().toISOString(),
+
+    uptime: Math.floor(
+      process.uptime()
+    ),
+
+    timestamp:
+      new Date().toISOString(),
   });
 });
 
-// API information
+/* =========================
+   API ROOT
+========================= */
+
 app.get("/", (req, res) => {
   res.json({
     name: "AuctionBD API",
@@ -77,14 +161,33 @@ app.get("/", (req, res) => {
   });
 });
 
-// ==================== API ROUTES ====================
+/* =========================
+   API ROUTES
+========================= */
 
-app.use("/api/auth", authRoutes);
-app.use("/api/auctions", auctionRoutes);
-app.use("/api/sellers", sellerRoutes);
-app.use("/api/admin", adminRoutes);
+app.use(
+  "/api/auth",
+  authRoutes
+);
 
-// ==================== 404 ====================
+app.use(
+  "/api/auctions",
+  auctionRoutes
+);
+
+app.use(
+  "/api/sellers",
+  sellerRoutes
+);
+
+app.use(
+  "/api/admin",
+  adminRoutes
+);
+
+/* =========================
+   404
+========================= */
 
 app.use((req, res) => {
   res.status(404).json({
@@ -93,20 +196,33 @@ app.use((req, res) => {
   });
 });
 
-// ==================== ERROR HANDLER ====================
+/* =========================
+   ERROR HANDLER
+========================= */
 
-app.use((error, req, res, next) => {
-  console.error("Server error:", error);
+app.use(
+  (error, req, res, next) => {
+    console.error(
+      "Server error:",
+      error
+    );
 
-  res.status(error.status || 500).json({
-    message:
-      process.env.NODE_ENV === "production"
-        ? "Internal server error."
-        : error.message || "Internal server error.",
-  });
-});
+    res.status(
+      error.status || 500
+    ).json({
+      message:
+        process.env.NODE_ENV ===
+        "production"
+          ? "Internal server error."
+          : error.message ||
+            "Internal server error.",
+    });
+  }
+);
 
-// ==================== DATABASE ====================
+/* =========================
+   DATABASE
+========================= */
 
 async function connectDatabase() {
   if (!process.env.MONGO_URI) {
@@ -115,47 +231,84 @@ async function connectDatabase() {
     );
   }
 
-  await mongoose.connect(process.env.MONGO_URI, {
-    serverSelectionTimeoutMS: 10000,
-    maxPoolSize: 10,
-    minPoolSize: 2,
-  });
+  await mongoose.connect(
+    process.env.MONGO_URI,
+    {
+      serverSelectionTimeoutMS: 10000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+    }
+  );
 
-  console.log("MongoDB connected successfully ✅");
+  console.log(
+    "MongoDB connected successfully ✅"
+  );
 }
 
-// ==================== START ====================
+/* =========================
+   START SERVER
+========================= */
 
 async function startServer() {
   try {
     await connectDatabase();
 
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`AuctionBD API running on port ${PORT} 🚀`);
-      console.log(`Local API: http://localhost:${PORT}`);
-    });
+    app.listen(
+      PORT,
+      "0.0.0.0",
+      () => {
+        console.log(
+          `AuctionBD API running on port ${PORT} 🚀`
+        );
+
+        console.log(
+          `Local API: http://localhost:${PORT}`
+        );
+      }
+    );
   } catch (error) {
-    console.error("Server startup failed ❌", error);
+    console.error(
+      "Server startup failed ❌",
+      error
+    );
+
     process.exit(1);
   }
 }
 
-// ==================== SHUTDOWN ====================
+/* =========================
+   GRACEFUL SHUTDOWN
+========================= */
 
 async function shutdown(signal) {
-  console.log(`${signal}: shutting down...`);
+  console.log(
+    `${signal}: shutting down...`
+  );
 
   try {
     await mongoose.connection.close();
-    console.log("MongoDB connection closed.");
+
+    console.log(
+      "MongoDB connection closed."
+    );
   } catch (error) {
-    console.error("Error closing MongoDB:", error);
+    console.error(
+      "Error closing MongoDB:",
+      error
+    );
   } finally {
     process.exit(0);
   }
 }
 
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on(
+  "SIGINT",
+  () => shutdown("SIGINT")
+);
+
+process.on(
+  "SIGTERM",
+  () => shutdown("SIGTERM")
+);
 
 startServer();

@@ -23,7 +23,8 @@ import {
 } from "lucide-react";
 
 const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
+  import.meta.env.VITE_API_URL ||
+  "https://auction-bd.onrender.com";
 
 const CATEGORIES = [
   "All",
@@ -824,27 +825,48 @@ function AuctionHome() {
     }
   });
 
-  const loadAuctions = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
+ const loadAuctions = useCallback(async () => {
+  try {
+    setLoading(true);
+    setError("");
 
-      const data = await api("/api/auctions?status=all");
-
-      if (!Array.isArray(data)) {
-        throw new Error("Invalid auction data received.");
+    const response = await fetch(
+      `${API_URL}/api/auctions?status=all`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
+        cache: "no-store",
       }
+    );
 
-      setAuctions(data.map(normalizeAuction));
-    } catch (err) {
-      console.error(err);
-      setError(
-        "Unable to load auctions right now. Please try again."
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+          `Server returned ${response.status}`
       );
-    } finally {
-      setLoading(false);
     }
-  }, []);
+
+    const list = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.auctions)
+      ? data.auctions
+      : [];
+
+    setAuctions(list.map(normalizeAuction));
+  } catch (error) {
+    console.error("Auction loading error:", error);
+
+    setError(
+      error.message ||
+        "Unable to load auctions right now. Please try again."
+    );
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   useEffect(() => {
     loadAuctions();
