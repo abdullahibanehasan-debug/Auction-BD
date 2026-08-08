@@ -19,11 +19,23 @@ import {
   AlertCircle,
   Loader2,
   Package,
+  LogIn,
 } from "lucide-react";
+
+/* =========================
+   CONFIG
+========================= */
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
   "https://auction-bd.onrender.com";
+
+const TOKEN_KEY = "auctionbd_token";
+const USER_KEY = "auctionbd_user";
+const FAVORITES_KEY = "auctionbd_favorites";
+
+const FALLBACK_IMAGE =
+  "https://placehold.co/800x800/0f172a/fbbf24?text=Auction+BD";
 
 const CATEGORIES = [
   "All",
@@ -35,43 +47,44 @@ const CATEGORIES = [
   "Collectibles",
 ];
 
-const FALLBACK_IMAGE =
-  "https://placehold.co/800x800/0f172a/fbbf24?text=Auction+BD";
+/* =========================
+   AUTH HELPERS
+========================= */
 
-const FAVORITES_KEY = "auctionbd_favorites";
-const TOKEN_KEY = "auctionbd_token";
-const USER_KEY = "auctionbd_user";
-
-const getToken = () => {
+function getToken() {
   try {
     return localStorage.getItem(TOKEN_KEY) || "";
   } catch {
     return "";
   }
-};
+}
 
-const getSavedUser = () => {
+function getSavedUser() {
   try {
     return JSON.parse(localStorage.getItem(USER_KEY) || "null");
   } catch {
     return null;
   }
-};
+}
 
-const saveAuth = (token, user) => {
+function saveAuth(token, user) {
   localStorage.setItem(TOKEN_KEY, token);
 
   if (user) {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   }
-};
+}
 
-const clearAuth = () => {
+function clearAuth() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
-};
+}
 
-const api = async (path, options = {}) => {
+/* =========================
+   API
+========================= */
+
+async function api(path, options = {}) {
   const token = getToken();
 
   const headers = {
@@ -104,20 +117,28 @@ const api = async (path, options = {}) => {
 
   if (!response.ok) {
     throw new Error(
-      data.message || `Server returned ${response.status}`
+      data?.message || `Server returned ${response.status}`
     );
   }
 
   return data;
-};
+}
 
-const normalizeAuction = (auction) => ({
-  ...auction,
-  id: auction._id || auction.id,
-  price: Number(auction.price) || 0,
-  bids: Number(auction.bids) || 0,
-  status: String(auction.status || "active").toLowerCase(),
-});
+/* =========================
+   HELPERS
+========================= */
+
+function normalizeAuction(auction) {
+  return {
+    ...auction,
+    id: auction._id || auction.id,
+    price: Number(auction.price) || 0,
+    bids: Number(auction.bids) || 0,
+    status: String(
+      auction.status || "active"
+    ).toLowerCase(),
+  };
+}
 
 function statusInfo(status) {
   if (status === "sold") {
@@ -163,7 +184,7 @@ function AuctionCard({
   return (
     <article
       onClick={() => onOpen(auction)}
-      className="group cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] transition hover:-translate-y-1 hover:border-amber-400/40"
+      className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] transition hover:-translate-y-1 hover:border-amber-400/40"
     >
       <div className="relative aspect-square overflow-hidden">
         <img
@@ -207,7 +228,9 @@ function AuctionCard({
           <Heart
             size={17}
             fill={
-              favorite ? "currentColor" : "none"
+              favorite
+                ? "currentColor"
+                : "none"
             }
           />
         </button>
@@ -261,7 +284,9 @@ function AuctionCard({
                 : "font-bold text-slate-500"
             }
           >
-            {active ? "Bid now →" : status.label}
+            {active
+              ? "Bid now →"
+              : status.label}
           </span>
         </div>
       </div>
@@ -280,9 +305,12 @@ function Skeleton() {
 
       <div className="space-y-4 p-5">
         <div className="h-3 w-20 animate-pulse rounded bg-white/10" />
-        <div className="h-6 w-4/5 animate-pulse rounded bg-white/10" />
-        <div className="h-8 w-1/2 animate-pulse rounded bg-white/10" />
-        <div className="h-4 w-full animate-pulse rounded bg-white/10" />
+        <div className="h-6 w-3/4 animate-pulse rounded bg-white/10" />
+
+        <div className="flex justify-between">
+          <div className="h-6 w-24 animate-pulse rounded bg-white/10" />
+          <div className="h-6 w-10 animate-pulse rounded bg-white/10" />
+        </div>
       </div>
     </div>
   );
@@ -293,24 +321,25 @@ function Skeleton() {
 ========================= */
 
 function AuthModal({
-  mode,
+  mode = "login",
   onClose,
   onSuccess,
 }) {
-  const [loginMode, setLoginMode] = useState(
-    mode === "login"
-  );
+  const [loginMode, setLoginMode] =
+    useState(mode === "login");
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] =
+    useState(false);
+
   const [error, setError] = useState("");
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const submit = async (event) => {
+    event.preventDefault();
 
     setError("");
     setLoading(true);
@@ -322,13 +351,13 @@ function AuthModal({
 
       const body = loginMode
         ? {
-            email,
+            email: email.trim(),
             password,
           }
         : {
-            name,
-            email,
-            phone,
+            name: name.trim(),
+            email: email.trim(),
+            phone: phone.trim(),
             password,
           };
 
@@ -355,7 +384,9 @@ function AuthModal({
 
       saveAuth(token, user);
 
-      onSuccess(user);
+      onSuccess(
+        user || getSavedUser()
+      );
     } catch (err) {
       setError(
         err.message ||
@@ -368,25 +399,29 @@ function AuthModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
         }
       }}
     >
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-slate-950 p-6 shadow-2xl sm:p-8">
-        <div className="flex items-center justify-between">
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl sm:p-8">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-black">
+            <p className="text-sm font-bold text-amber-400">
+              AUCTIONBD
+            </p>
+
+            <h2 className="mt-2 text-2xl font-black">
               {loginMode
                 ? "Welcome back"
                 : "Create account"}
             </h2>
 
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-2 text-sm text-slate-500">
               {loginMode
-                ? "Login to bid and sell."
+                ? "Sign in to bid and sell."
                 : "Join AuctionBD today."}
             </p>
           </div>
@@ -394,7 +429,7 @@ function AuthModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 hover:bg-white/10"
+            className="rounded-full p-2 text-slate-400 hover:bg-white/10 hover:text-white"
           >
             <X size={20} />
           </button>
@@ -463,7 +498,7 @@ function AuthModal({
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 font-bold text-black disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-3.5 font-bold text-black transition hover:bg-amber-300 disabled:opacity-50"
           >
             {loading && (
               <Loader2
@@ -481,7 +516,9 @@ function AuthModal({
         <button
           type="button"
           onClick={() => {
-            setLoginMode(!loginMode);
+            setLoginMode(
+              (current) => !current
+            );
             setError("");
           }}
           className="mt-5 w-full text-sm text-slate-400 hover:text-white"
@@ -519,35 +556,46 @@ function SellerPage({
   const [videos, setVideos] = useState([]);
   const [requests, setRequests] = useState([]);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] =
+    useState(false);
+
   const [loadingRequests, setLoadingRequests] =
     useState(false);
 
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [message, setMessage] =
+    useState("");
 
-  const imageInput = useRef(null);
-  const videoInput = useRef(null);
+  const [error, setError] =
+    useState("");
 
-  const loadRequests = useCallback(async () => {
-    if (!getToken()) return;
+  const imageInput =
+    useRef(null);
 
-    setLoadingRequests(true);
+  const videoInput =
+    useRef(null);
 
-    try {
-      const data = await api(
-        "/api/seller-requests/mine"
-      );
+  const loadRequests =
+    useCallback(async () => {
+      if (!getToken()) return;
 
-      setRequests(
-        Array.isArray(data) ? data : []
-      );
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingRequests(false);
-    }
-  }, []);
+      setLoadingRequests(true);
+
+      try {
+        const data = await api(
+          "/api/seller-requests/mine"
+        );
+
+        setRequests(
+          Array.isArray(data)
+            ? data
+            : data?.requests || []
+        );
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoadingRequests(false);
+      }
+    }, []);
 
   useEffect(() => {
     loadRequests();
@@ -560,8 +608,8 @@ function SellerPage({
     }));
   };
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const submit = async (event) => {
+    event.preventDefault();
 
     if (!getToken()) {
       onLogin();
@@ -596,10 +644,13 @@ function SellerPage({
         body.append("videos", file);
       });
 
-      await api("/api/seller-requests", {
-        method: "POST",
-        body,
-      });
+      await api(
+        "/api/seller-requests",
+        {
+          method: "POST",
+          body,
+        }
+      );
 
       setMessage(
         "Your auction request has been submitted successfully."
@@ -631,13 +682,13 @@ function SellerPage({
     } catch (err) {
       if (
         err.message
-          ?.toLowerCase()
+          .toLowerCase()
           .includes("login") ||
         err.message
-          ?.toLowerCase()
+          .toLowerCase()
           .includes("session") ||
         err.message
-          ?.toLowerCase()
+          .toLowerCase()
           .includes("token")
       ) {
         clearAuth();
@@ -652,10 +703,10 @@ function SellerPage({
 
   if (!user && !getToken()) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
+      <main className="mx-auto max-w-3xl px-6 py-20">
         <button
           onClick={onBack}
-          className="mb-8 text-sm text-slate-400 hover:text-white"
+          className="mb-8 flex items-center gap-2 text-sm text-slate-400 hover:text-white"
         >
           ← Back to auctions
         </button>
@@ -671,8 +722,7 @@ function SellerPage({
           </h1>
 
           <p className="mt-3 text-slate-400">
-            Create an account or login before
-            listing your item.
+            Create an account or login before listing your item.
           </p>
 
           <button
@@ -690,7 +740,7 @@ function SellerPage({
     <main className="mx-auto max-w-7xl px-6 py-10">
       <button
         onClick={onBack}
-        className="mb-8 text-sm text-slate-400 hover:text-white"
+        className="mb-8 flex items-center gap-2 text-sm text-slate-400 hover:text-white"
       >
         ← Back to auctions
       </button>
@@ -707,8 +757,7 @@ function SellerPage({
             </h1>
 
             <p className="mt-3 text-slate-400">
-              Upload photos, provide the details
-              and submit your item for review.
+              Upload photos, provide the details and submit your item for review.
             </p>
           </div>
 
@@ -734,7 +783,10 @@ function SellerPage({
               required
               value={form.title}
               onChange={(e) =>
-                update("title", e.target.value)
+                update(
+                  "title",
+                  e.target.value
+                )
               }
               placeholder="Item title"
               className="field"
@@ -836,12 +888,17 @@ function SellerPage({
             <textarea
               value={form.notes}
               onChange={(e) =>
-                update("notes", e.target.value)
+                update(
+                  "notes",
+                  e.target.value
+                )
               }
               placeholder="Additional notes (optional)"
               rows={3}
               className="field resize-none"
             />
+
+            {/* PHOTOS */}
 
             <div>
               <p className="mb-2 font-bold">
@@ -885,6 +942,8 @@ function SellerPage({
               )}
             </div>
 
+            {/* VIDEO */}
+
             <div>
               <p className="mb-2 font-bold">
                 Video{" "}
@@ -918,6 +977,16 @@ function SellerPage({
                   )
                 }
               />
+
+              {videos.length > 0 && (
+                <p className="mt-2 text-sm text-slate-400">
+                  {videos.length} video
+                  {videos.length === 1
+                    ? ""
+                    : "s"}{" "}
+                  selected
+                </p>
+              )}
             </div>
 
             <button
@@ -937,7 +1006,7 @@ function SellerPage({
         </section>
 
         <aside>
-          <div className="sticky top-24 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 lg:sticky lg:top-24">
             <h2 className="text-xl font-bold">
               Your requests
             </h2>
@@ -956,39 +1025,43 @@ function SellerPage({
               </div>
             ) : (
               <div className="mt-5 space-y-3">
-                {requests.map((request) => (
-                  <div
-                    key={request._id}
-                    className="rounded-xl border border-white/10 p-4"
-                  >
-                    <p className="font-bold">
-                      {request.title}
-                    </p>
+                {requests.map(
+                  (request) => (
+                    <div
+                      key={request._id}
+                      className="rounded-xl border border-white/10 p-4"
+                    >
+                      <p className="font-bold">
+                        {request.title}
+                      </p>
 
-                    <p className="mt-2 text-xs capitalize text-amber-400">
-                      {String(
-                        request.status
-                      ).replace(
-                        "_",
-                        " "
+                      <p className="mt-2 text-xs capitalize text-amber-400">
+                        {String(
+                          request.status || ""
+                        ).replace(
+                          "_",
+                          " "
+                        )}
+                      </p>
+
+                      {request.rejectionReason && (
+                        <p className="mt-2 text-xs text-red-300">
+                          {
+                            request.rejectionReason
+                          }
+                        </p>
                       )}
-                    </p>
 
-                    {request.rejectionReason && (
-                      <p className="mt-2 text-xs text-red-300">
-                        {
-                          request.rejectionReason
-                        }
-                      </p>
-                    )}
-
-                    {request.adminNotes && (
-                      <p className="mt-2 text-xs text-slate-400">
-                        {request.adminNotes}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                      {request.adminNotes && (
+                        <p className="mt-2 text-xs text-slate-400">
+                          {
+                            request.adminNotes
+                          }
+                        </p>
+                      )}
+                    </div>
+                  )
+                )}
               </div>
             )}
           </div>
@@ -1003,26 +1076,35 @@ function SellerPage({
 ========================= */
 
 function AuctionHome() {
-  const [auctions, setAuctions] = useState([]);
+  const [auctions, setAuctions] =
+    useState([]);
+
   const [selectedAuction, setSelectedAuction] =
     useState(null);
 
-  const [page, setPage] = useState("home");
-  const [authMode, setAuthMode] = useState(null);
+  const [page, setPage] =
+    useState("home");
 
-  const [user, setUser] = useState(
-    getSavedUser
-  );
+  const [authMode, setAuthMode] =
+    useState(null);
 
-  const [search, setSearch] = useState("");
+  const [user, setUser] =
+    useState(getSavedUser);
+
+  const [search, setSearch] =
+    useState("");
+
   const [category, setCategory] =
     useState("All");
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loading, setLoading] =
+    useState(true);
 
-  const [favorites, setFavorites] = useState(
-    () => {
+  const [error, setError] =
+    useState("");
+
+  const [favorites, setFavorites] =
+    useState(() => {
       try {
         return JSON.parse(
           localStorage.getItem(
@@ -1032,24 +1114,29 @@ function AuctionHome() {
       } catch {
         return [];
       }
-    }
-  );
+    });
 
-  const loadAuctions = useCallback(
-    async () => {
+  /* =========================
+     LOAD AUCTIONS
+  ========================= */
+
+  const loadAuctions =
+    useCallback(async () => {
       try {
         setLoading(true);
         setError("");
 
-        const response = await fetch(
-          `${API_URL}/api/auctions?status=all`,
-          {
-            headers: {
-              Accept: "application/json",
-            },
-            cache: "no-store",
-          }
-        );
+        const response =
+          await fetch(
+            `${API_URL}/api/auctions?status=all`,
+            {
+              headers: {
+                Accept:
+                  "application/json",
+              },
+              cache: "no-store",
+            }
+          );
 
         const data =
           await response.json();
@@ -1063,7 +1150,9 @@ function AuctionHome() {
 
         const list = Array.isArray(data)
           ? data
-          : Array.isArray(data?.auctions)
+          : Array.isArray(
+              data?.auctions
+            )
           ? data.auctions
           : [];
 
@@ -1078,14 +1167,12 @@ function AuctionHome() {
 
         setError(
           err.message ||
-            "Unable to load auctions right now."
+            "Unable to load auctions."
         );
       } finally {
         setLoading(false);
       }
-    },
-    []
-  );
+    }, []);
 
   useEffect(() => {
     loadAuctions();
@@ -1098,38 +1185,49 @@ function AuctionHome() {
     );
   }, [favorites]);
 
-  const filteredAuctions = useMemo(() => {
-    const term =
-      search.trim().toLowerCase();
+  /* =========================
+     FILTER
+  ========================= */
 
-    return auctions.filter((auction) => {
-      const searchable = [
-        auction.title,
-        auction.category,
-        auction.categoryGroup,
-        auction.description,
-        auction.seller,
-        auction.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+  const filteredAuctions =
+    useMemo(() => {
+      const term =
+        search.trim().toLowerCase();
 
-      return (
-        searchable.includes(term) &&
-        (category === "All" ||
-          auction.categoryGroup ===
-            category)
+      return auctions.filter(
+        (auction) => {
+          const searchable = [
+            auction.title,
+            auction.category,
+            auction.categoryGroup,
+            auction.description,
+            auction.seller,
+            auction.status,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+
+          return (
+            searchable.includes(term) &&
+            (category === "All" ||
+              auction.categoryGroup ===
+                category)
+          );
+        }
       );
-    });
-  }, [
-    auctions,
-    search,
-    category,
-  ]);
+    }, [
+      auctions,
+      search,
+      category,
+    ]);
 
-  const toggleFavorite = useCallback(
-    (id) => {
+  /* =========================
+     FAVORITES
+  ========================= */
+
+  const toggleFavorite =
+    useCallback((id) => {
       setFavorites((current) =>
         current.includes(id)
           ? current.filter(
@@ -1137,9 +1235,11 @@ function AuctionHome() {
             )
           : [...current, id]
       );
-    },
-    []
-  );
+    }, []);
+
+  /* =========================
+     SCROLL
+  ========================= */
 
   const scrollTo = (id) => {
     document
@@ -1150,11 +1250,20 @@ function AuctionHome() {
       });
   };
 
+  /* =========================
+     LOGOUT
+  ========================= */
+
   const logout = () => {
     clearAuth();
     setUser(null);
     setPage("home");
+    setSelectedAuction(null);
   };
+
+  /* =========================
+     SELLER
+  ========================= */
 
   const openSeller = () => {
     if (!getToken()) {
@@ -1170,10 +1279,11 @@ function AuctionHome() {
     });
   };
 
-  /* =================================
-     IMPORTANT FIX:
-     PASS onLogin TO AUCTION DETAILS
-  ================================= */
+  /* =========================
+     AUCTION DETAILS
+     IMPORTANT:
+     onLogin IS PASSED HERE
+  ========================= */
 
   if (selectedAuction) {
     return (
@@ -1189,6 +1299,10 @@ function AuctionHome() {
       />
     );
   }
+
+  /* =========================
+     SELLER PAGE
+  ========================= */
 
   if (page === "seller") {
     return (
@@ -1209,16 +1323,17 @@ function AuctionHome() {
           }
 
           .field::placeholder {
-            color: #64748b;
+            color: rgb(100 116 139);
           }
 
           select option {
             background: #0f172a;
+            color: white;
           }
         `}</style>
 
         <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/90 backdrop-blur">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
             <button
               onClick={() =>
                 setPage("home")
@@ -1264,7 +1379,6 @@ function AuctionHome() {
                 newUser ||
                   getSavedUser()
               );
-
               setAuthMode(null);
             }}
           />
@@ -1272,6 +1386,10 @@ function AuctionHome() {
       </div>
     );
   }
+
+  /* =========================
+     HOME
+  ========================= */
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -1290,8 +1408,13 @@ function AuctionHome() {
           border-color: #fbbf24;
         }
 
+        .field::placeholder {
+          color: rgb(100 116 139);
+        }
+
         select option {
           background: #0f172a;
+          color: white;
         }
       `}</style>
 
@@ -1300,7 +1423,9 @@ function AuctionHome() {
       ========================= */}
 
       <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-4">
+          {/* LOGO */}
+
           <button
             onClick={() =>
               window.scrollTo({
@@ -1308,11 +1433,11 @@ function AuctionHome() {
                 behavior: "smooth",
               })
             }
-            className="flex items-center gap-2 sm:gap-3"
+            className="flex shrink-0 items-center gap-2 sm:gap-3"
           >
             <Gavel
               className="text-amber-400"
-              size={24}
+              size={23}
             />
 
             <div className="text-left">
@@ -1329,43 +1454,42 @@ function AuctionHome() {
             </div>
           </button>
 
+          {/* DESKTOP NAV */}
+
           <nav className="hidden gap-7 md:flex">
             {[
-              ["Auctions", "auctions"],
+              [
+                "Auctions",
+                "auctions",
+              ],
               [
                 "Categories",
                 "categories",
               ],
               ["How It Works", "how"],
-            ].map(([name, id]) => (
-              <button
-                key={id}
-                onClick={() =>
-                  scrollTo(id)
-                }
-                className="text-sm text-slate-400 hover:text-white"
-              >
-                {name}
-              </button>
-            ))}
+            ].map(
+              ([name, id]) => (
+                <button
+                  key={id}
+                  onClick={() =>
+                    scrollTo(id)
+                  }
+                  className="text-sm text-slate-400 hover:text-white"
+                >
+                  {name}
+                </button>
+              )
+            )}
           </nav>
 
-          {/* =========================
-              AUTH / SELL BUTTONS
+          {/* AUTH / SELL BUTTONS */}
 
-              MOBILE:
-              Sign Up | Sell
-
-              DESKTOP:
-              Login | Sell
-          ========================= */}
-
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {user ? (
               <>
                 <button
                   onClick={openSeller}
-                  className="rounded-lg border border-amber-400/30 px-3 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-400/10 sm:text-sm"
+                  className="rounded-lg border border-amber-400/30 px-2.5 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-400/10 sm:px-3 sm:text-sm"
                 >
                   Sell Item
                 </button>
@@ -1380,29 +1504,17 @@ function AuctionHome() {
               </>
             ) : (
               <>
-                {/* SIGN UP - ALWAYS VISIBLE */}
+                {/* SIGN UP IS NOW VISIBLE ON MOBILE */}
+
                 <button
                   onClick={() =>
-                    setAuthMode(
-                      "register"
-                    )
+                    setAuthMode("register")
                   }
-                  className="rounded-lg px-2 py-2 text-xs font-semibold text-slate-300 hover:text-white sm:px-3 sm:text-sm"
+                  className="rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-300 hover:text-white sm:px-3 sm:text-sm"
                 >
                   Sign Up
                 </button>
 
-                {/* LOGIN - DESKTOP ONLY */}
-                <button
-                  onClick={() =>
-                    setAuthMode("login")
-                  }
-                  className="hidden rounded-lg px-3 py-2 text-sm text-slate-300 hover:text-white sm:block"
-                >
-                  Login
-                </button>
-
-                {/* SELL */}
                 <button
                   onClick={openSeller}
                   className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-bold text-black hover:bg-amber-300 sm:px-4 sm:text-sm"
@@ -1419,7 +1531,7 @@ function AuctionHome() {
           HERO
       ========================= */}
 
-      <section className="mx-auto max-w-7xl px-6 py-20">
+      <section className="mx-auto max-w-7xl px-6 py-16 sm:py-20">
         <div className="max-w-3xl">
           <div className="mb-5 inline-flex rounded-full bg-amber-400/10 px-4 py-2 text-sm text-amber-400">
             Live auctions happening now
@@ -1436,9 +1548,10 @@ function AuctionHome() {
           </h2>
 
           <p className="mt-5 text-lg text-slate-400">
-            Bangladesh&apos;s digital auction
-            marketplace. Discover products and
-            win amazing deals.
+            Bangladesh&apos;s digital
+            auction marketplace.
+            Discover products and win
+            amazing deals.
           </p>
 
           <button
@@ -1458,11 +1571,11 @@ function AuctionHome() {
       ========================= */}
 
       <section className="mx-auto max-w-7xl px-6">
-        <div className="flex rounded-2xl border border-white/10 bg-white/5 p-3">
+        <div className="flex rounded-2xl border border-white/10 bg-white/5 p-2 sm:p-3">
           <div className="flex flex-1 items-center gap-3 px-3">
             <Search
               size={20}
-              className="text-slate-500"
+              className="shrink-0 text-slate-500"
             />
 
             <input
@@ -1473,7 +1586,7 @@ function AuctionHome() {
                 )
               }
               placeholder="Search auctions..."
-              className="w-full bg-transparent outline-none"
+              className="w-full bg-transparent py-2 outline-none"
             />
 
             {search && (
@@ -1519,7 +1632,8 @@ function AuctionHome() {
 
           {!loading && !error && (
             <p className="mt-1 text-sm text-slate-500">
-              {filteredAuctions.length} auction
+              {filteredAuctions.length}{" "}
+              auction
               {filteredAuctions.length ===
               1
                 ? ""
@@ -1531,9 +1645,11 @@ function AuctionHome() {
 
         {loading && (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {[1, 2, 3, 4].map((x) => (
-              <Skeleton key={x} />
-            ))}
+            {[1, 2, 3, 4].map(
+              (x) => (
+                <Skeleton key={x} />
+              )
+            )}
           </div>
         )}
 
@@ -1623,22 +1739,26 @@ function AuctionHome() {
           </h3>
 
           <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-            {CATEGORIES.map((item) => (
-              <button
-                key={item}
-                onClick={() => {
-                  setCategory(item);
-                  scrollTo("auctions");
-                }}
-                className={`rounded-xl border px-4 py-4 ${
-                  category === item
-                    ? "border-amber-400 bg-amber-400/5 text-amber-400"
-                    : "border-white/10 hover:border-white/30"
-                }`}
-              >
-                {item}
-              </button>
-            ))}
+            {CATEGORIES.map(
+              (item) => (
+                <button
+                  key={item}
+                  onClick={() => {
+                    setCategory(item);
+                    scrollTo(
+                      "auctions"
+                    );
+                  }}
+                  className={`rounded-xl border px-4 py-4 ${
+                    category === item
+                      ? "border-amber-400 bg-amber-400/5 text-amber-400"
+                      : "border-white/10 hover:border-white/30"
+                  }`}
+                >
+                  {item}
+                </button>
+              )
+            )}
           </div>
         </div>
       </section>
@@ -1659,31 +1779,36 @@ function AuctionHome() {
           {[
             [Search, "Find Auction"],
             [Gavel, "Place Bid"],
-            [ShieldCheck, "Win Securely"],
-          ].map(([Icon, title]) => (
-            <div
-              key={title}
-              className="rounded-2xl border border-white/10 bg-white/5 p-8"
-            >
-              <Icon className="text-amber-400" />
+            [
+              ShieldCheck,
+              "Win Securely",
+            ],
+          ].map(
+            ([Icon, title]) => (
+              <div
+                key={title}
+                className="rounded-2xl border border-white/10 bg-white/5 p-8"
+              >
+                <Icon className="text-amber-400" />
 
-              <h4 className="mt-5 text-xl font-bold">
-                {title}
-              </h4>
-            </div>
-          ))}
+                <h4 className="mt-5 text-xl font-bold">
+                  {title}
+                </h4>
+              </div>
+            )
+          )}
         </div>
       </section>
 
       {/* =========================
-          SELL CTA
+          SELL
       ========================= */}
 
       <section
         id="sell"
         className="mx-auto max-w-7xl scroll-mt-24 px-6 pb-20"
       >
-        <div className="rounded-3xl bg-amber-400 p-10 text-black">
+        <div className="rounded-3xl bg-amber-400 p-8 text-black sm:p-10">
           <h3 className="text-3xl font-black">
             Turn your item into an auction.
           </h3>
