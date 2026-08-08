@@ -91,7 +91,9 @@ function getUser() {
 
 function saveAuth(token, user) {
   try {
-    if (token) localStorage.setItem(KEYS.token, token);
+    if (token) {
+      localStorage.setItem(KEYS.token, token);
+    }
 
     if (user) {
       localStorage.setItem(KEYS.user, JSON.stringify(user));
@@ -363,7 +365,7 @@ function Toast({ toast, onClose }) {
   const success = toast.type === "success";
 
   return (
-    <div className="fixed bottom-5 left-1/2 z-[2000] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 fade-in">
+    <div className="fixed bottom-5 right-5 z-[1000] max-w-sm">
       <div
         className={`flex items-start gap-3 rounded-2xl border p-4 shadow-2xl ${
           success
@@ -372,9 +374,9 @@ function Toast({ toast, onClose }) {
         }`}
       >
         {success ? (
-          <CheckCircle2 size={20} className="mt-0.5 shrink-0" />
+          <CheckCircle2 size={20} className="shrink-0" />
         ) : (
-          <AlertCircle size={20} className="mt-0.5 shrink-0" />
+          <AlertCircle size={20} className="shrink-0" />
         )}
 
         <p className="flex-1 text-sm font-medium">
@@ -401,11 +403,7 @@ function ThemeButton({ dark, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      title={
-        dark
-          ? "Switch to light mode"
-          : "Switch to dark mode"
-      }
+      title={dark ? "Switch to light mode" : "Switch to dark mode"}
       className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
         dark
           ? "border-slate-700 bg-slate-900 text-amber-400"
@@ -484,9 +482,7 @@ function AuthModal({
       }
 
       if (form.password.length < 6) {
-        setError(
-          "Password must be at least 6 characters."
-        );
+        setError("Password must be at least 6 characters.");
         return;
       }
 
@@ -518,8 +514,7 @@ function AuthModal({
             email,
             phone,
             password: form.password,
-            confirmPassword:
-              form.confirmPassword,
+            confirmPassword: form.confirmPassword,
           };
 
       const data = await api(path, {
@@ -560,7 +555,6 @@ function AuthModal({
       }
 
       saveAuth(token, loggedUser);
-
       onSuccess(loggedUser || getUser());
     } catch (error) {
       console.error("Authentication error:", error);
@@ -595,10 +589,7 @@ function AuthModal({
                 dark ? "text-white" : "text-gray-900"
               }`}
             >
-              AUCTION
-              <span className="text-orange-500">
-                BD
-              </span>
+              AUCTION<span className="text-orange-500">BD</span>
             </p>
 
             <p className="text-[9px] font-semibold tracking-[.2em] text-gray-400">
@@ -694,10 +685,7 @@ function AuthModal({
             type="password"
             value={form.password}
             onChange={(e) =>
-              update(
-                "password",
-                e.target.value
-              )
+              update("password", e.target.value)
             }
             placeholder="Password"
             autoComplete={
@@ -799,17 +787,13 @@ function AuctionCard({
       <div className="relative aspect-[4/3] overflow-hidden">
         <img
           src={auction.image}
-          alt={
-            auction.title ||
-            "Auction item"
-          }
+          alt={auction.title || "Auction item"}
           loading="lazy"
           className={`h-full w-full object-cover transition duration-500 group-hover:scale-105 ${
             !active ? "opacity-75" : ""
           }`}
           onError={(event) => {
-            event.currentTarget.src =
-              FALLBACK_IMAGE;
+            event.currentTarget.src = FALLBACK_IMAGE;
           }}
         />
 
@@ -866,8 +850,7 @@ function AuctionCard({
               : "text-gray-900"
           }`}
         >
-          {auction.title ||
-            "Untitled Auction"}
+          {auction.title || "Untitled Auction"}
         </h3>
 
         <div className="mt-5 flex justify-between">
@@ -917,11 +900,10 @@ function AuctionCard({
         >
           <span className="flex items-center gap-1 text-gray-500">
             <Clock3 size={14} />
+
             {auction.time ||
               (auction.endTime
-                ? formatDate(
-                    auction.endTime
-                  )
+                ? formatDate(auction.endTime)
                 : status.label)}
           </span>
 
@@ -1012,9 +994,7 @@ function SellerPage({
   const [videos, setVideos] = useState([]);
   const [requests, setRequests] = useState([]);
 
-  const [loading, setLoading] =
-    useState(false);
-
+  const [loading, setLoading] = useState(false);
   const [loadingRequests, setLoadingRequests] =
     useState(false);
 
@@ -1025,36 +1005,35 @@ function SellerPage({
     ? "border-slate-800 bg-slate-900"
     : "border-gray-200 bg-white";
 
-  const loadRequests =
-    useCallback(async () => {
-      if (!getToken()) return;
+  const loadRequests = useCallback(async () => {
+    if (!getToken()) return;
 
-      setLoadingRequests(true);
+    setLoadingRequests(true);
 
-      try {
-        const data = await api(
-          "/api/seller-requests/mine"
-        );
+    try {
+      const data = await api(
+        "/api/seller-requests/mine"
+      );
 
-        const list = Array.isArray(data)
-          ? data
-          : data?.requests || [];
+      const list = Array.isArray(data)
+        ? data
+        : data?.requests || [];
 
-        setRequests(list);
-      } catch (error) {
-        console.error(
-          "Seller requests:",
-          error
-        );
+      setRequests(list);
+    } catch (error) {
+      console.error(
+        "Seller requests:",
+        error
+      );
 
-        if (error.status === 401) {
-          clearAuth();
-          onLogin();
-        }
-      } finally {
-        setLoadingRequests(false);
+      if (error.status === 401) {
+        clearAuth();
+        onLogin();
       }
-    }, [onLogin]);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, [onLogin]);
 
   useEffect(() => {
     loadRequests();
@@ -1082,9 +1061,7 @@ function SellerPage({
       }
 
       if (file.size > MAX_IMAGE_SIZE) {
-        rejected.push(
-          `${file.name} (too large)`
-        );
+        rejected.push(`${file.name} (too large)`);
         continue;
       }
 
@@ -1277,10 +1254,10 @@ function SellerPage({
 
   if (!user && !getToken()) {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
+      <main className="mx-auto max-w-4xl px-6 py-16">
         <button
           onClick={onBack}
-          className="mb-8 text-sm font-semibold text-orange-500"
+          className="mb-8 flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-orange-500"
         >
           ← Back to auctions
         </button>
@@ -1313,10 +1290,10 @@ function SellerPage({
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:py-14">
+    <main className="mx-auto max-w-7xl px-6 py-10">
       <button
         onClick={onBack}
-        className="mb-8 text-sm font-semibold text-orange-500"
+        className="mb-8 flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-orange-500"
       >
         ← Back to auctions
       </button>
@@ -1332,9 +1309,9 @@ function SellerPage({
           </h1>
 
           <p className="mt-3 text-gray-500">
-            Upload photos directly from your
-            phone, provide the details and
-            submit your item for review.
+            Upload photos directly from your phone,
+            provide the details and submit your item
+            for review.
           </p>
 
           <form
@@ -1351,10 +1328,7 @@ function SellerPage({
                 maxLength={150}
                 value={form.title}
                 onChange={(e) =>
-                  update(
-                    "title",
-                    e.target.value
-                  )
+                  update("title", e.target.value)
                 }
                 placeholder="e.g. iPhone 15 Pro Max"
                 className="field"
@@ -1402,8 +1376,7 @@ function SellerPage({
                   </option>
 
                   {CATEGORIES.filter(
-                    (item) =>
-                      item !== "All"
+                    (item) => item !== "All"
                   ).map((item) => (
                     <option
                       key={item}
@@ -1443,9 +1416,7 @@ function SellerPage({
                 <input
                   type="number"
                   min="0"
-                  value={
-                    form.expectedPrice
-                  }
+                  value={form.expectedPrice}
                   onChange={(e) =>
                     update(
                       "expectedPrice",
@@ -1485,9 +1456,7 @@ function SellerPage({
                 required
                 rows={6}
                 maxLength={5000}
-                value={
-                  form.description
-                }
+                value={form.description}
                 onChange={(e) =>
                   update(
                     "description",
@@ -1499,8 +1468,7 @@ function SellerPage({
               />
 
               <p className="mt-1 text-right text-xs text-gray-400">
-                {form.description.length}
-                /5000
+                {form.description.length}/5000
               </p>
             </div>
 
@@ -1533,16 +1501,14 @@ function SellerPage({
                 </p>
 
                 <span className="text-xs text-gray-400">
-                  {images.length}/
-                  {MAX_IMAGES}
+                  {images.length}/{MAX_IMAGES}
                 </span>
               </div>
 
               <button
                 type="button"
                 disabled={
-                  images.length >=
-                  MAX_IMAGES
+                  images.length >= MAX_IMAGES
                 }
                 onClick={() =>
                   imageInput.current?.click()
@@ -1568,25 +1534,22 @@ function SellerPage({
 
               {images.length > 0 && (
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {images.map(
-                    (file, index) => (
+                  {images.map((file, index) => {
+                    const previewUrl =
+                      URL.createObjectURL(file);
+
+                    return (
                       <div
                         key={`${file.name}-${file.size}-${index}`}
                         className="relative overflow-hidden rounded-xl border"
                       >
                         <img
-                          src={URL.createObjectURL(
-                            file
-                          )}
-                          alt={`Upload ${
-                            index + 1
-                          }`}
+                          src={previewUrl}
+                          alt={`Upload ${index + 1}`}
                           className="aspect-square w-full object-cover"
-                          onLoad={(event) =>
+                          onLoad={() =>
                             URL.revokeObjectURL(
-                              event
-                                .currentTarget
-                                .src
+                              previewUrl
                             )
                           }
                         />
@@ -1594,9 +1557,7 @@ function SellerPage({
                         <button
                           type="button"
                           onClick={() =>
-                            removeImage(
-                              index
-                            )
+                            removeImage(index)
                           }
                           className="absolute right-2 top-2 rounded-full bg-black/70 p-1.5 text-white"
                         >
@@ -1609,8 +1570,8 @@ function SellerPage({
                           </span>
                         )}
                       </div>
-                    )
-                  )}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1627,16 +1588,14 @@ function SellerPage({
                 </p>
 
                 <span className="text-xs text-gray-400">
-                  {videos.length}/
-                  {MAX_VIDEOS}
+                  {videos.length}/{MAX_VIDEOS}
                 </span>
               </div>
 
               <button
                 type="button"
                 disabled={
-                  videos.length >=
-                  MAX_VIDEOS
+                  videos.length >= MAX_VIDEOS
                 }
                 onClick={() =>
                   videoInput.current?.click()
@@ -1662,45 +1621,41 @@ function SellerPage({
 
               {videos.length > 0 && (
                 <div className="mt-3 space-y-2">
-                  {videos.map(
-                    (file, index) => (
-                      <div
-                        key={`${file.name}-${file.size}-${index}`}
-                        className={`flex items-center justify-between rounded-xl border p-3 ${
-                          dark
-                            ? "border-slate-800"
-                            : "border-gray-200"
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold">
-                            {file.name}
-                          </p>
+                  {videos.map((file, index) => (
+                    <div
+                      key={`${file.name}-${file.size}-${index}`}
+                      className={`flex items-center justify-between rounded-xl border p-3 ${
+                        dark
+                          ? "border-slate-800"
+                          : "border-gray-200"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">
+                          {file.name}
+                        </p>
 
-                          <p className="text-xs text-gray-400">
-                            {(
-                              file.size /
-                              1024 /
-                              1024
-                            ).toFixed(1)}{" "}
-                            MB
-                          </p>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            removeVideo(
-                              index
-                            )
-                          }
-                          className="rounded-full p-2 text-gray-400 hover:bg-red-50 hover:text-red-500"
-                        >
-                          <X size={17} />
-                        </button>
+                        <p className="text-xs text-gray-400">
+                          {(
+                            file.size /
+                            1024 /
+                            1024
+                          ).toFixed(1)}{" "}
+                          MB
+                        </p>
                       </div>
-                    )
-                  )}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeVideo(index)
+                        }
+                        className="rounded-full p-2 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                      >
+                        <X size={17} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -1737,9 +1692,7 @@ function SellerPage({
 
               <button
                 onClick={loadRequests}
-                disabled={
-                  loadingRequests
-                }
+                disabled={loadingRequests}
                 className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800"
               >
                 <RefreshCw
@@ -1763,69 +1716,60 @@ function SellerPage({
                   size={35}
                   className="mx-auto mb-3 text-gray-300"
                 />
-
                 No requests yet.
               </div>
             ) : (
               <div className="mt-5 space-y-3">
-                {requests.map(
-                  (request) => (
-                    <div
-                      key={
-                        request._id ||
-                        request.id
-                      }
-                      className={`rounded-xl border p-4 ${
-                        dark
-                          ? "border-slate-800"
-                          : "border-gray-200"
-                      }`}
-                    >
-                      <p className="font-bold">
-                        {request.title}
-                      </p>
+                {requests.map((request) => (
+                  <div
+                    key={
+                      request._id ||
+                      request.id
+                    }
+                    className={`rounded-xl border p-4 ${
+                      dark
+                        ? "border-slate-800"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    <p className="font-bold">
+                      {request.title}
+                    </p>
 
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold capitalize text-orange-500">
-                          {String(
-                            request.status ||
-                              "pending"
-                          ).replace(
-                            /_/g,
-                            " "
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold capitalize text-orange-500">
+                        {String(
+                          request.status ||
+                            "pending"
+                        ).replace(
+                          /_/g,
+                          " "
+                        )}
+                      </span>
+
+                      {request.createdAt && (
+                        <span className="text-[10px] text-gray-400">
+                          {formatDate(
+                            request.createdAt
                           )}
                         </span>
-
-                        {request.createdAt && (
-                          <span className="text-[10px] text-gray-400">
-                            {formatDate(
-                              request.createdAt
-                            )}
-                          </span>
-                        )}
-                      </div>
-
-                      {request.rejectionReason && (
-                        <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600">
-                          <b>
-                            Rejected:
-                          </b>{" "}
-                          {
-                            request.rejectionReason
-                          }
-                        </div>
-                      )}
-
-                      {request.adminNotes && (
-                        <div className="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-slate-950">
-                          {
-                            request.adminNotes
-                          }
-                        </div>
                       )}
                     </div>
-                  )
-                )}
+
+                    {request.rejectionReason && (
+                      <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600">
+                        <b>Rejected:</b>{" "}
+                        {request.rejectionReason}
+                      </div>
+                    )}
+
+                    {request.adminNotes && (
+                      <div className="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-slate-950">
+                        {request.adminNotes}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -1857,7 +1801,7 @@ function Navbar({
           : "border-gray-200 bg-white/95"
       }`}
     >
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-4">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <button
           onClick={() =>
             window.scrollTo({
@@ -1867,10 +1811,6 @@ function Navbar({
           }
           className="flex shrink-0 items-center gap-2"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white">
-            <Gavel size={20} />
-          </div>
-
           <div className="text-left">
             <h1 className="text-lg font-black sm:text-xl">
               AUCTION
@@ -1976,9 +1916,7 @@ function HomePage({
   dark,
 }) {
   const filteredAuctions = useMemo(() => {
-    const term = search
-      .trim()
-      .toLowerCase();
+    const term = search.trim().toLowerCase();
 
     return auctions.filter((auction) => {
       const searchable = [
@@ -2041,10 +1979,9 @@ function HomePage({
           </h2>
 
           <p className="mt-5 max-w-2xl text-lg leading-8 text-gray-500">
-            Bangladesh&apos;s digital
-            auction marketplace.
-            Discover products, place
-            competitive bids and win.
+            Bangladesh&apos;s digital auction
+            marketplace. Discover products,
+            place competitive bids and win.
           </p>
 
           <button
@@ -2078,9 +2015,7 @@ function HomePage({
             <input
               value={search}
               onChange={(e) =>
-                setSearch(
-                  e.target.value
-                )
+                setSearch(e.target.value)
               }
               placeholder="Search auctions..."
               className="w-full bg-transparent py-2 outline-none"
@@ -2129,8 +2064,7 @@ function HomePage({
 
           {!loading && !error && (
             <p className="mt-1 text-sm text-gray-500">
-              {filteredAuctions.length}{" "}
-              auction
+              {filteredAuctions.length} auction
               {filteredAuctions.length ===
               1
                 ? ""
@@ -2142,14 +2076,12 @@ function HomePage({
 
         {loading && (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {[1, 2, 3, 4].map(
-              (id) => (
-                <Skeleton
-                  key={id}
-                  dark={dark}
-                />
-              )
-            )}
+            {[1, 2, 3, 4].map((id) => (
+              <Skeleton
+                key={id}
+                dark={dark}
+              />
+            ))}
           </div>
         )}
 
@@ -2175,8 +2107,7 @@ function HomePage({
 
         {!loading &&
           !error &&
-          filteredAuctions.length ===
-            0 && (
+          filteredAuctions.length === 0 && (
             <div className="rounded-2xl border border-gray-200 p-12 text-center">
               <Search
                 size={36}
@@ -2188,8 +2119,7 @@ function HomePage({
               </h4>
 
               <p className="mt-2 text-gray-500">
-                Try another search or
-                category.
+                Try another search or category.
               </p>
 
               <button
@@ -2206,8 +2136,7 @@ function HomePage({
 
         {!loading &&
           !error &&
-          filteredAuctions.length >
-            0 && (
+          filteredAuctions.length > 0 && (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {filteredAuctions.map(
                 (auction) => (
@@ -2217,12 +2146,8 @@ function HomePage({
                     favorite={favorites.includes(
                       auction.id
                     )}
-                    onOpen={
-                      onOpenAuction
-                    }
-                    onFavorite={
-                      onFavorite
-                    }
+                    onOpen={onOpenAuction}
+                    onFavorite={onFavorite}
                     dark={dark}
                   />
                 )
@@ -2247,28 +2172,24 @@ function HomePage({
           </h3>
 
           <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-            {CATEGORIES.map(
-              (item) => (
-                <button
-                  key={item}
-                  onClick={() => {
-                    setCategory(item);
-                    scrollTo(
-                      "auctions"
-                    );
-                  }}
-                  className={`rounded-xl border px-4 py-4 font-medium ${
-                    category === item
-                      ? "border-orange-500 bg-orange-500/10 text-orange-500"
-                      : dark
-                      ? "border-slate-700 bg-slate-900 text-slate-300"
-                      : "border-gray-200 bg-white text-gray-700"
-                  }`}
-                >
-                  {item}
-                </button>
-              )
-            )}
+            {CATEGORIES.map((item) => (
+              <button
+                key={item}
+                onClick={() => {
+                  setCategory(item);
+                  scrollTo("auctions");
+                }}
+                className={`rounded-xl border px-4 py-4 font-medium ${
+                  category === item
+                    ? "border-orange-500 bg-orange-500/10 text-orange-500"
+                    : dark
+                    ? "border-slate-700 bg-slate-900 text-slate-300"
+                    : "border-gray-200 bg-white text-gray-700"
+                }`}
+              >
+                {item}
+              </button>
+            ))}
           </div>
         </div>
       </section>
@@ -2301,11 +2222,7 @@ function HomePage({
               "Highest valid bidder wins when the auction ends.",
             ],
           ].map(
-            ([
-              Icon,
-              title,
-              description,
-            ]) => (
+            ([Icon, title, description]) => (
               <div
                 key={title}
                 className={`rounded-2xl border p-8 shadow-sm ${
@@ -2340,9 +2257,9 @@ function HomePage({
           </h3>
 
           <p className="mt-3 max-w-xl text-white/80">
-            Upload photos directly from
-            your phone, submit your item
-            and let buyers compete for it.
+            Upload photos directly from your
+            phone, submit your item and let
+            buyers compete for it.
           </p>
 
           <button
@@ -2370,14 +2287,14 @@ function Footer({ dark }) {
           : "border-gray-200"
       }`}
     >
-      <div className="mx-auto flex max-w-7xl flex-col justify-between gap-5 sm:flex-row">
+      <div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 sm:flex-row sm:items-center">
         <div>
-          <b>
+          <div className="text-xl font-black">
             AUCTION
             <span className="text-orange-500">
               BD
             </span>
-          </b>
+          </div>
 
           <p className="mt-1 text-xs text-gray-500">
             BID. WIN. OWN.
@@ -2415,71 +2332,45 @@ function Footer({ dark }) {
 ========================================================= */
 
 function App() {
-  const [auctions, setAuctions] =
-    useState([]);
-
-  const [
-    selectedAuction,
-    setSelectedAuction,
-  ] = useState(null);
-
-  const [page, setPage] =
-    useState("home");
-
-  const [authMode, setAuthMode] =
+  const [auctions, setAuctions] = useState([]);
+  const [selectedAuction, setSelectedAuction] =
     useState(null);
+  const [page, setPage] = useState("home");
+  const [authMode, setAuthMode] = useState(null);
+  const [user, setUser] = useState(getUser);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [user, setUser] =
-    useState(getUser);
+  const [favorites, setFavorites] = useState(() =>
+    readStorage(KEYS.favorites, [])
+  );
 
-  const [search, setSearch] =
-    useState("");
+  const [toast, setToast] = useState(null);
 
-  const [category, setCategory] =
-    useState("All");
+  const [dark, setDark] = useState(() => {
+    try {
+      const saved =
+        localStorage.getItem(KEYS.theme);
 
-  const [loading, setLoading] =
-    useState(true);
+      if (saved === "dark") {
+        return true;
+      }
 
-  const [error, setError] =
-    useState("");
-
-  const [favorites, setFavorites] =
-    useState(() =>
-      readStorage(
-        KEYS.favorites,
-        []
-      )
-    );
-
-  const [toast, setToast] =
-    useState(null);
-
-  const [dark, setDark] =
-    useState(() => {
-      try {
-        const saved =
-          localStorage.getItem(
-            KEYS.theme
-          );
-
-        if (saved === "dark") {
-          return true;
-        }
-
-        if (saved === "light") {
-          return false;
-        }
-
-        return (
-          window.matchMedia?.(
-            "(prefers-color-scheme: dark)"
-          ).matches || false
-        );
-      } catch {
+      if (saved === "light") {
         return false;
       }
-    });
+
+      return (
+        window.matchMedia?.(
+          "(prefers-color-scheme: dark)"
+        ).matches || false
+      );
+    } catch {
+      return false;
+    }
+  });
 
   /* =======================================================
      TOAST
@@ -2534,8 +2425,7 @@ function App() {
   const toggleFavorite = useCallback(
     (id) => {
       setFavorites((current) => {
-        const exists =
-          current.includes(id);
+        const exists = current.includes(id);
 
         notify(
           exists
@@ -2558,41 +2448,38 @@ function App() {
      LOAD AUCTIONS
   ======================================================= */
 
-  const loadAuctions =
-    useCallback(async () => {
-      try {
-        setLoading(true);
-        setError("");
+  const loadAuctions = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
 
-        const data = await api(
-          "/api/auctions?status=all"
-        );
+      const data = await api(
+        "/api/auctions?status=all"
+      );
 
-        const list = Array.isArray(data)
-          ? data
-          : Array.isArray(
-              data?.auctions
-            )
-          ? data.auctions
-          : [];
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.auctions)
+        ? data.auctions
+        : [];
 
-        setAuctions(
-          list.map(normalizeAuction)
-        );
-      } catch (error) {
-        console.error(
-          "Auction loading:",
-          error
-        );
+      setAuctions(
+        list.map(normalizeAuction)
+      );
+    } catch (error) {
+      console.error(
+        "Auction loading:",
+        error
+      );
 
-        setError(
-          error?.message ||
-            "Unable to load auctions."
-        );
-      } finally {
-        setLoading(false);
-      }
-    }, []);
+      setError(
+        error?.message ||
+          "Unable to load auctions."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadAuctions();
@@ -2604,10 +2491,7 @@ function App() {
 
   const handleAuthSuccess = useCallback(
     (newUser) => {
-      setUser(
-        newUser || getUser()
-      );
-
+      setUser(newUser || getUser());
       setAuthMode(null);
 
       notify(
@@ -2672,7 +2556,6 @@ function App() {
     return (
       <>
         <GlobalStyles dark={dark} />
-
         <AdminPanel />
       </>
     );
@@ -2709,9 +2592,7 @@ function App() {
           <ThemeButton
             dark={dark}
             onClick={() =>
-              setDark(
-                (value) => !value
-              )
+              setDark((value) => !value)
             }
           />
         </div>
@@ -2779,8 +2660,7 @@ function App() {
                 dark={dark}
                 onClick={() =>
                   setDark(
-                    (value) =>
-                      !value
+                    (value) => !value
                   )
                 }
               />
