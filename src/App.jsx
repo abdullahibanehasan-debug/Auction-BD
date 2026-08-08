@@ -10,30 +10,28 @@ import AdminPanel from "./AdminPanel";
 import AuctionDetails from "./AuctionDetails";
 
 import {
-  Search,
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
   Gavel,
   Heart,
-  Clock3,
-  ArrowRight,
+  Loader2,
+  LogIn,
+  LogOut,
+  Package,
+  RefreshCw,
+  Search,
   ShieldCheck,
   Truck,
-  Zap,
-  X,
-  RefreshCw,
-  User,
-  LogOut,
   Upload,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  Package,
-  LogIn,
-  Sun,
-  Moon,
+  User,
+  X,
+  Zap,
 } from "lucide-react";
 
 /* =========================================================
-CONFIG
+   CONFIG
 ========================================================= */
 
 const API_URL = (
@@ -41,10 +39,12 @@ const API_URL = (
   "https://auction-bd-api.onrender.com"
 ).replace(/\/+$/, "");
 
-const TOKEN_KEY = "auctionbd_token";
-const USER_KEY = "auctionbd_user";
-const FAVORITES_KEY = "auctionbd_favorites";
-const THEME_KEY = "auctionbd_theme";
+const KEYS = {
+  token: "auctionbd_token",
+  user: "auctionbd_user",
+  favorites: "auctionbd_favorites",
+  theme: "auctionbd_theme",
+};
 
 const FALLBACK_IMAGE =
   "https://placehold.co/800x800/f8fafc/f59e0b?text=Auction+BD";
@@ -59,59 +59,60 @@ const CATEGORIES = [
   "Collectibles",
 ];
 
+const MAX_IMAGES = 10;
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const MAX_VIDEOS = 2;
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+
 /* =========================================================
-AUTH HELPERS
+   STORAGE
 ========================================================= */
+
+function readStorage(key, fallback = null) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 function getToken() {
   try {
-    return localStorage.getItem(TOKEN_KEY) || "";
+    return localStorage.getItem(KEYS.token) || "";
   } catch {
     return "";
   }
 }
 
-function getSavedUser() {
-  try {
-    return JSON.parse(
-      localStorage.getItem(USER_KEY) || "null"
-    );
-  } catch {
-    return null;
-  }
+function getUser() {
+  return readStorage(KEYS.user, null);
 }
 
 function saveAuth(token, user) {
   try {
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token);
-    }
+    if (token) localStorage.setItem(KEYS.token, token);
 
     if (user) {
-      localStorage.setItem(
-        USER_KEY,
-        JSON.stringify(user)
-      );
+      localStorage.setItem(KEYS.user, JSON.stringify(user));
     }
   } catch (error) {
-    console.error("Failed to save auth:", error);
+    console.error("Auth storage error:", error);
   }
 }
 
 function clearAuth() {
   try {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(KEYS.token);
+    localStorage.removeItem(KEYS.user);
   } catch {}
 }
 
 /* =========================================================
-API
+   API
 ========================================================= */
 
 async function api(path, options = {}) {
-  const token = getToken();
-
   const headers = {
     Accept: "application/json",
     ...(options.headers || {}),
@@ -121,6 +122,8 @@ async function api(path, options = {}) {
     headers["Content-Type"] = "application/json";
   }
 
+  const token = getToken();
+
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -128,21 +131,15 @@ async function api(path, options = {}) {
   let response;
 
   try {
-    response = await fetch(
-      `${API_URL}${path}`,
-      {
-        ...options,
-        headers,
-        cache:
-          options.cache ||
-          "no-store",
-      }
-    );
-  } catch (error) {
-    console.error("API connection error:", error);
-
+    response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+      credentials: "include",
+      cache: options.cache || "no-store",
+    });
+  } catch {
     throw new Error(
-      `Unable to connect to the AuctionBD server. Please check your internet connection or try again.`
+      "Unable to connect to AuctionBD. Please check your internet connection."
     );
   }
 
@@ -154,9 +151,7 @@ async function api(path, options = {}) {
     data = text ? JSON.parse(text) : {};
   } catch {
     data = {
-      message:
-        text ||
-        "Invalid server response.",
+      message: text || "Invalid server response.",
     };
   }
 
@@ -164,18 +159,12 @@ async function api(path, options = {}) {
     let message =
       data?.message ||
       data?.error ||
-      `Server returned ${response.status}`;
-
-    if (response.status === 404) {
-      message =
-        data?.message ||
-        `API endpoint not found: ${path}. Check that the backend route exists.`;
-    }
+      `Server returned ${response.status}.`;
 
     if (response.status === 401) {
       message =
         data?.message ||
-        "Your login session is invalid or expired.";
+        "Your login session has expired.";
     }
 
     if (response.status === 403) {
@@ -184,146 +173,608 @@ async function api(path, options = {}) {
         "You do not have permission to perform this action.";
     }
 
+    if (response.status === 404) {
+      message =
+        data?.message ||
+        `API endpoint not found: ${path}`;
+    }
+
     if (response.status >= 500) {
       message =
         data?.message ||
-        "The AuctionBD server encountered an error. Please try again.";
+        "AuctionBD server error. Please try again.";
     }
 
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    error.data = data;
+
+    throw error;
   }
 
   return data;
 }
 
 /* =========================================================
-HELPERS
+   HELPERS
 ========================================================= */
 
-function money(value = 0) {
-  return `৳${Number(value || 0).toLocaleString(
-    "en-BD"
-  )}`;
-}
+const money = (value) =>
+  `৳${Number(value || 0).toLocaleString("en-BD")}`;
 
-function normalizeAuction(auction) {
+function normalizeAuction(item) {
   return {
-    ...auction,
-    id: auction?._id || auction?.id,
-    price: Number(auction?.price) || 0,
-    bids: Number(auction?.bids) || 0,
-    status: String(
-      auction?.status || "active"
-    ).toLowerCase(),
+    ...item,
+    id: item?._id || item?.id,
+    price: Number(item?.price) || 0,
+    bids: Number(item?.bids) || 0,
+    status: String(item?.status || "active").toLowerCase(),
+    image:
+      item?.image ||
+      item?.images?.[0] ||
+      FALLBACK_IMAGE,
   };
 }
 
 function statusInfo(status) {
-  if (status === "sold") {
-    return {
+  const statuses = {
+    sold: {
       label: "SOLD",
-      color:
-        "bg-emerald-500 text-white",
-    };
-  }
-
-  if (status === "ended") {
-    return {
+      className: "bg-emerald-500 text-white",
+    },
+    ended: {
       label: "ENDED",
-      color:
-        "bg-slate-600 text-white",
-    };
-  }
-
-  if (status === "cancelled") {
-    return {
+      className: "bg-slate-600 text-white",
+    },
+    cancelled: {
       label: "CANCELLED",
-      color:
-        "bg-red-600 text-white",
-    };
-  }
-
-  return {
-    label: "LIVE",
-    color:
-      "bg-red-500 text-white",
+      className: "bg-red-600 text-white",
+    },
+    pending: {
+      label: "PENDING",
+      className: "bg-yellow-500 text-white",
+    },
+    active: {
+      label: "LIVE",
+      className: "bg-red-500 text-white",
+    },
   };
+
+  return statuses[status] || statuses.active;
+}
+
+function formatDate(value) {
+  if (!value) return "";
+
+  try {
+    return new Date(value).toLocaleDateString("en-BD", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return "";
+  }
 }
 
 /* =========================================================
-GLOBAL STYLES
+   GLOBAL STYLES
 ========================================================= */
 
 function GlobalStyles({ dark }) {
   return (
-    <style>
-      {`
-        * {
-          box-sizing: border-box;
+    <style>{`
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        transition:
+          background-color .2s ease,
+          color .2s ease;
+      }
+
+      button,
+      input,
+      textarea,
+      select {
+        font-family: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+      }
+
+      .field {
+        width: 100%;
+        border: 1px solid ${dark ? "#334155" : "#e5e7eb"};
+        border-radius: 12px;
+        background: ${dark ? "#0f172a" : "#fff"};
+        color: ${dark ? "#f8fafc" : "#111827"};
+        padding: 13px 15px;
+        outline: none;
+        transition: .2s ease;
+      }
+
+      .field:focus {
+        border-color: #f59e0b;
+        box-shadow: 0 0 0 3px rgba(245,158,11,.12);
+      }
+
+      .field::placeholder {
+        color: ${dark ? "#64748b" : "#9ca3af"};
+      }
+
+      select option {
+        background: ${dark ? "#0f172a" : "#fff"};
+        color: ${dark ? "#f8fafc" : "#111827"};
+      }
+
+      .line-clamp-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(5px);
         }
 
-        html {
-          scroll-behavior: smooth;
+        to {
+          opacity: 1;
+          transform: translateY(0);
         }
+      }
 
-        body {
-          margin: 0;
-          transition:
-            background-color .2s ease,
-            color .2s ease;
-        }
-
-        .field {
-          width: 100%;
-          border-radius: 12px;
-          border: 1px solid ${
-            dark ? "#334155" : "#e5e7eb"
-          };
-          background: ${
-            dark ? "#0f172a" : "#ffffff"
-          };
-          padding: 13px 15px;
-          outline: none;
-          color: ${
-            dark ? "#f8fafc" : "#111827"
-          };
-          transition: .2s ease;
-        }
-
-        .field:focus {
-          border-color: #f59e0b;
-          box-shadow:
-            0 0 0 3px rgba(245,158,11,.12);
-        }
-
-        .field::placeholder {
-          color: ${
-            dark ? "#64748b" : "#9ca3af"
-          };
-        }
-
-        select option {
-          background: ${
-            dark ? "#0f172a" : "#ffffff"
-          };
-          color: ${
-            dark ? "#f8fafc" : "#111827"
-          };
-        }
-
-        input,
-        textarea,
-        select,
-        button {
-          font-family: inherit;
-        }
-      `}
-    </style>
+      .fade-in {
+        animation: fadeIn .2s ease;
+      }
+    `}</style>
   );
 }
 
 /* =========================================================
-AUCTION CARD
+   TOAST
+========================================================= */
+
+function Toast({ toast, onClose }) {
+  useEffect(() => {
+    if (!toast) return;
+
+    const timer = setTimeout(onClose, 3500);
+
+    return () => clearTimeout(timer);
+  }, [toast, onClose]);
+
+  if (!toast) return null;
+
+  const success = toast.type === "success";
+
+  return (
+    <div className="fixed bottom-5 left-1/2 z-[2000] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 fade-in">
+      <div
+        className={`flex items-start gap-3 rounded-2xl border p-4 shadow-2xl ${
+          success
+            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+            : "border-red-200 bg-red-50 text-red-800"
+        }`}
+      >
+        {success ? (
+          <CheckCircle2 size={20} className="mt-0.5 shrink-0" />
+        ) : (
+          <AlertCircle size={20} className="mt-0.5 shrink-0" />
+        )}
+
+        <p className="flex-1 text-sm font-medium">
+          {toast.message}
+        </p>
+
+        <button
+          onClick={onClose}
+          className="opacity-60 hover:opacity-100"
+        >
+          <X size={17} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   THEME BUTTON
+========================================================= */
+
+function ThemeButton({ dark, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={
+        dark
+          ? "Switch to light mode"
+          : "Switch to dark mode"
+      }
+      className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+        dark
+          ? "border-slate-700 bg-slate-900 text-amber-400"
+          : "border-gray-200 bg-white text-slate-700"
+      }`}
+    >
+      {dark ? "☀️" : "🌙"}
+    </button>
+  );
+}
+
+/* =========================================================
+   AUTH MODAL
+========================================================= */
+
+function AuthModal({
+  mode = "login",
+  onClose,
+  onSuccess,
+  dark,
+}) {
+  const [loginMode, setLoginMode] = useState(
+    mode !== "register"
+  );
+
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    password: "",
+    confirmPassword: "",
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const oldOverflow = document.body.style.overflow;
+
+    document.body.style.overflow = "hidden";
+
+    const close = (event) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", close);
+
+    return () => {
+      document.body.style.overflow = oldOverflow;
+      window.removeEventListener("keydown", close);
+    };
+  }, [onClose]);
+
+  const update = (key, value) => {
+    setForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+
+    setError("");
+
+    const name = form.name.trim();
+    const email = form.email.trim().toLowerCase();
+    const phone = form.phone.trim();
+
+    if (!loginMode) {
+      if (name.length < 2) {
+        setError("Please enter your full name.");
+        return;
+      }
+
+      if (form.password.length < 6) {
+        setError(
+          "Password must be at least 6 characters."
+        );
+        return;
+      }
+
+      if (form.password !== form.confirmPassword) {
+        setError("Passwords do not match.");
+        return;
+      }
+    }
+
+    if (!email) {
+      setError("Please enter your email.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const path = loginMode
+        ? "/api/auth/login"
+        : "/api/auth/register";
+
+      const body = loginMode
+        ? {
+            email,
+            password: form.password,
+          }
+        : {
+            name,
+            email,
+            phone,
+            password: form.password,
+            confirmPassword:
+              form.confirmPassword,
+          };
+
+      const data = await api(path, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+
+      const token =
+        data?.token ||
+        data?.accessToken ||
+        data?.user?.token;
+
+      const loggedUser =
+        data?.user ||
+        data?.account ||
+        null;
+
+      if (!token) {
+        if (!loginMode) {
+          setLoginMode(true);
+
+          setForm((current) => ({
+            ...current,
+            password: "",
+            confirmPassword: "",
+          }));
+
+          setError(
+            "Account created. Please sign in."
+          );
+
+          return;
+        }
+
+        throw new Error(
+          "Login succeeded but no token was returned."
+        );
+      }
+
+      saveAuth(token, loggedUser);
+
+      onSuccess(loggedUser || getUser());
+    } catch (error) {
+      console.error("Authentication error:", error);
+
+      setError(
+        error?.message ||
+          "Unable to complete authentication."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[999] flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className={`relative w-full max-w-md rounded-3xl p-7 shadow-2xl ${
+          dark ? "bg-slate-900" : "bg-white"
+        }`}
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <p
+              className={`text-lg font-black ${
+                dark ? "text-white" : "text-gray-900"
+              }`}
+            >
+              AUCTION
+              <span className="text-orange-500">
+                BD
+              </span>
+            </p>
+
+            <p className="text-[9px] font-semibold tracking-[.2em] text-gray-400">
+              BID. WIN. OWN.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <h2
+          className={`mt-7 text-2xl font-black ${
+            dark ? "text-white" : "text-gray-900"
+          }`}
+        >
+          {loginMode
+            ? "Welcome back"
+            : "Create your account"}
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-gray-500">
+          {loginMode
+            ? "Sign in to bid, save auctions and sell your items."
+            : "Join AuctionBD and start buying or selling."}
+        </p>
+
+        {error && (
+          <div
+            className={`mt-5 flex gap-3 rounded-xl border p-4 text-sm ${
+              dark
+                ? "border-red-400/20 bg-red-400/10 text-red-300"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            <AlertCircle
+              size={18}
+              className="shrink-0"
+            />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form
+          onSubmit={submit}
+          className="mt-6 space-y-4"
+        >
+          {!loginMode && (
+            <>
+              <input
+                required
+                value={form.name}
+                onChange={(e) =>
+                  update("name", e.target.value)
+                }
+                placeholder="Full name"
+                autoComplete="name"
+                className="field"
+              />
+
+              <input
+                value={form.phone}
+                onChange={(e) =>
+                  update("phone", e.target.value)
+                }
+                placeholder="Phone number"
+                autoComplete="tel"
+                className="field"
+              />
+            </>
+          )}
+
+          <input
+            required
+            type="email"
+            value={form.email}
+            onChange={(e) =>
+              update("email", e.target.value)
+            }
+            placeholder="Email address"
+            autoComplete="email"
+            className="field"
+          />
+
+          <input
+            required
+            minLength={6}
+            type="password"
+            value={form.password}
+            onChange={(e) =>
+              update(
+                "password",
+                e.target.value
+              )
+            }
+            placeholder="Password"
+            autoComplete={
+              loginMode
+                ? "current-password"
+                : "new-password"
+            }
+            className="field"
+          />
+
+          {!loginMode && (
+            <input
+              required
+              minLength={6}
+              type="password"
+              value={form.confirmPassword}
+              onChange={(e) =>
+                update(
+                  "confirmPassword",
+                  e.target.value
+                )
+              }
+              placeholder="Confirm password"
+              autoComplete="new-password"
+              className="field"
+            />
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3.5 font-bold text-white hover:bg-orange-600 disabled:opacity-60"
+          >
+            {loading ? (
+              <>
+                <Loader2
+                  size={18}
+                  className="animate-spin"
+                />
+                {loginMode
+                  ? "Signing in..."
+                  : "Creating account..."}
+              </>
+            ) : (
+              <>
+                <LogIn size={18} />
+                {loginMode
+                  ? "Sign In"
+                  : "Create Account"}
+              </>
+            )}
+          </button>
+        </form>
+
+        <button
+          type="button"
+          onClick={() => {
+            setLoginMode((value) => !value);
+            setError("");
+          }}
+          className={`mt-5 w-full rounded-xl border px-4 py-3 text-sm font-semibold ${
+            dark
+              ? "border-slate-700 text-slate-300 hover:border-orange-400"
+              : "border-gray-200 text-gray-700 hover:border-orange-300"
+          }`}
+        >
+          {loginMode
+            ? "Don't have an account? Create one"
+            : "Already have an account? Sign in"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   AUCTION CARD
 ========================================================= */
 
 function AuctionCard({
@@ -333,12 +784,8 @@ function AuctionCard({
   onFavorite,
   dark,
 }) {
-  const status = statusInfo(
-    auction.status
-  );
-
-  const active =
-    auction.status === "active";
+  const status = statusInfo(auction.status);
+  const active = auction.status === "active";
 
   return (
     <article
@@ -351,10 +798,7 @@ function AuctionCard({
     >
       <div className="relative aspect-[4/3] overflow-hidden">
         <img
-          src={
-            auction.image ||
-            FALLBACK_IMAGE
-          }
+          src={auction.image}
           alt={
             auction.title ||
             "Auction item"
@@ -370,12 +814,11 @@ function AuctionCard({
         />
 
         <span
-          className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-bold ${status.color}`}
+          className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-bold ${status.className}`}
         >
           {active && (
             <i className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-white" />
           )}
-
           {status.label}
         </span>
 
@@ -390,7 +833,7 @@ function AuctionCard({
             event.stopPropagation();
             onFavorite(auction.id);
           }}
-          className={`absolute right-3 top-3 rounded-full p-2 shadow transition ${
+          className={`absolute right-3 top-3 rounded-full p-2 shadow ${
             favorite
               ? "bg-orange-500 text-white"
               : dark
@@ -412,6 +855,7 @@ function AuctionCard({
       <div className="p-5">
         <p className="text-xs font-semibold text-orange-500">
           {auction.category ||
+            auction.categoryGroup ||
             "Auction"}
         </p>
 
@@ -426,20 +870,12 @@ function AuctionCard({
             "Untitled Auction"}
         </h3>
 
-        <div className="mt-5 flex justify-between gap-4">
+        <div className="mt-5 flex justify-between">
           <div>
-            <p
-              className={`text-xs ${
-                dark
-                  ? "text-slate-500"
-                  : "text-gray-500"
-              }`}
-            >
-              {auction.status ===
-              "sold"
+            <p className="text-xs text-gray-500">
+              {auction.status === "sold"
                 ? "Sold for"
-                : auction.status ===
-                  "ended"
+                : auction.status === "ended"
                 ? "Final bid"
                 : "Current bid"}
             </p>
@@ -456,13 +892,7 @@ function AuctionCard({
           </div>
 
           <div className="text-right">
-            <p
-              className={`text-xs ${
-                dark
-                  ? "text-slate-500"
-                  : "text-gray-500"
-              }`}
-            >
+            <p className="text-xs text-gray-500">
               Bids
             </p>
 
@@ -485,25 +915,20 @@ function AuctionCard({
               : "border-gray-100"
           }`}
         >
-          <span
-            className={`flex items-center gap-1 ${
-              dark
-                ? "text-slate-500"
-                : "text-gray-500"
-            }`}
-          >
+          <span className="flex items-center gap-1 text-gray-500">
             <Clock3 size={14} />
-
             {auction.time ||
-              status.label}
+              (auction.endTime
+                ? formatDate(
+                    auction.endTime
+                  )
+                : status.label)}
           </span>
 
           <span
             className={
               active
                 ? "font-bold text-orange-500"
-                : dark
-                ? "font-bold text-slate-600"
                 : "font-bold text-gray-400"
             }
           >
@@ -518,10 +943,14 @@ function AuctionCard({
 }
 
 /* =========================================================
-SKELETON
+   SKELETON
 ========================================================= */
 
 function Skeleton({ dark }) {
+  const bg = dark
+    ? "bg-slate-800"
+    : "bg-gray-200";
+
   return (
     <div
       className={`overflow-hidden rounded-2xl border ${
@@ -531,45 +960,25 @@ function Skeleton({ dark }) {
       }`}
     >
       <div
-        className={`aspect-[4/3] animate-pulse ${
-          dark
-            ? "bg-slate-800"
-            : "bg-gray-200"
-        }`}
+        className={`aspect-[4/3] animate-pulse ${bg}`}
       />
 
       <div className="space-y-4 p-5">
         <div
-          className={`h-3 w-20 animate-pulse rounded ${
-            dark
-              ? "bg-slate-800"
-              : "bg-gray-200"
-          }`}
+          className={`h-3 w-20 animate-pulse rounded ${bg}`}
         />
 
         <div
-          className={`h-6 w-3/4 animate-pulse rounded ${
-            dark
-              ? "bg-slate-800"
-              : "bg-gray-200"
-          }`}
+          className={`h-6 w-3/4 animate-pulse rounded ${bg}`}
         />
 
         <div className="flex justify-between">
           <div
-            className={`h-6 w-24 animate-pulse rounded ${
-              dark
-                ? "bg-slate-800"
-                : "bg-gray-200"
-            }`}
+            className={`h-6 w-24 animate-pulse rounded ${bg}`}
           />
 
           <div
-            className={`h-6 w-10 animate-pulse rounded ${
-              dark
-                ? "bg-slate-800"
-                : "bg-gray-200"
-            }`}
+            className={`h-6 w-10 animate-pulse rounded ${bg}`}
           />
         </div>
       </div>
@@ -578,528 +987,7 @@ function Skeleton({ dark }) {
 }
 
 /* =========================================================
-AUTH MODAL
-========================================================= */
-
-function AuthModal({
-  mode = "login",
-  onClose,
-  onSuccess,
-  dark,
-}) {
-  const [loginMode, setLoginMode] =
-    useState(mode !== "register");
-
-  const [name, setName] =
-    useState("");
-
-  const [email, setEmail] =
-    useState("");
-
-  const [phone, setPhone] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
-
-  const [confirmPassword, setConfirmPassword] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  const [success, setSuccess] =
-    useState("");
-
-  useEffect(() => {
-    const originalOverflow =
-      document.body.style.overflow;
-
-    document.body.style.overflow =
-      "hidden";
-
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener(
-      "keydown",
-      handleKeyDown
-    );
-
-    return () => {
-      document.body.style.overflow =
-        originalOverflow;
-
-      window.removeEventListener(
-        "keydown",
-        handleKeyDown
-      );
-    };
-  }, [onClose]);
-
-  const submit = async (event) => {
-    event.preventDefault();
-
-    setError("");
-    setSuccess("");
-
-    const cleanName = name.trim();
-    const cleanEmail =
-      email.trim().toLowerCase();
-    const cleanPhone = phone.trim();
-
-    if (!loginMode) {
-      if (cleanName.length < 2) {
-        setError(
-          "Please enter your full name."
-        );
-        return;
-      }
-
-      if (password.length < 6) {
-        setError(
-          "Password must be at least 6 characters."
-        );
-        return;
-      }
-
-      if (
-        password !== confirmPassword
-      ) {
-        setError(
-          "Passwords do not match."
-        );
-        return;
-      }
-    }
-
-    setLoading(true);
-
-    try {
-      const path = loginMode
-        ? "/api/auth/login"
-        : "/api/auth/register";
-
-      const body = loginMode
-        ? {
-            email: cleanEmail,
-            password,
-          }
-        : {
-            name: cleanName,
-            email: cleanEmail,
-            phone: cleanPhone,
-            password,
-            confirmPassword,
-          };
-
-      const data = await api(path, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-
-      const token =
-        data?.token ||
-        data?.accessToken ||
-        data?.user?.token;
-
-      const loggedUser =
-        data?.user ||
-        data?.account ||
-        null;
-
-      if (!token) {
-        if (!loginMode) {
-          setSuccess(
-            "Account created successfully. Please sign in."
-          );
-
-          setLoginMode(true);
-          setPassword("");
-          setConfirmPassword("");
-          return;
-        }
-
-        throw new Error(
-          "Login succeeded, but the server did not return a login token."
-        );
-      }
-
-      saveAuth(
-        token,
-        loggedUser
-      );
-
-      const finalUser =
-        loggedUser || getSavedUser();
-
-      setSuccess(
-        loginMode
-          ? "Signed in successfully."
-          : "Account created successfully."
-      );
-
-      onSuccess(finalUser);
-    } catch (err) {
-      console.error(
-        "Authentication error:",
-        err
-      );
-
-      setError(
-        err?.message ||
-          "Unable to complete authentication."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-[999] flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
-      onMouseDown={(event) => {
-        if (
-          event.target ===
-          event.currentTarget
-        ) {
-          onClose();
-        }
-      }}
-    >
-      <div
-        className={`relative w-full max-w-md overflow-hidden rounded-3xl shadow-2xl ${
-          dark
-            ? "bg-slate-900"
-            : "bg-white"
-        }`}
-      >
-        <div className="p-6 sm:p-8">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-white">
-                  <Gavel size={20} />
-                </div>
-
-                <div>
-                  <p
-                    className={`text-lg font-black ${
-                      dark
-                        ? "text-white"
-                        : "text-gray-900"
-                    }`}
-                  >
-                    AUCTION
-                    <span className="text-orange-500">
-                      BD
-                    </span>
-                  </p>
-
-                  <p className="text-[9px] font-semibold tracking-[.2em] text-gray-400">
-                    BID. WIN. OWN.
-                  </p>
-                </div>
-              </div>
-
-              <h2
-                className={`mt-7 text-2xl font-black ${
-                  dark
-                    ? "text-white"
-                    : "text-gray-900"
-                }`}
-              >
-                {loginMode
-                  ? "Welcome back"
-                  : "Create your account"}
-              </h2>
-
-              <p
-                className={`mt-2 text-sm leading-6 ${
-                  dark
-                    ? "text-slate-400"
-                    : "text-gray-600"
-                }`}
-              >
-                {loginMode
-                  ? "Sign in to place bids, save auctions and sell your items."
-                  : "Join AuctionBD and start buying or selling today."}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className={`rounded-full p-2 transition ${
-                dark
-                  ? "text-slate-400 hover:bg-slate-800 hover:text-white"
-                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          {error && (
-            <div
-              className={`mt-5 flex items-start gap-3 rounded-xl border p-4 text-sm ${
-                dark
-                  ? "border-red-400/20 bg-red-400/10 text-red-300"
-                  : "border-red-200 bg-red-50 text-red-700"
-              }`}
-            >
-              <AlertCircle
-                size={18}
-                className="mt-0.5 shrink-0"
-              />
-
-              <span>{error}</span>
-            </div>
-          )}
-
-          {success && (
-            <div
-              className={`mt-5 flex items-start gap-3 rounded-xl border p-4 text-sm ${
-                dark
-                  ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
-              }`}
-            >
-              <CheckCircle2
-                size={18}
-                className="mt-0.5 shrink-0"
-              />
-
-              <span>{success}</span>
-            </div>
-          )}
-
-          <form
-            onSubmit={submit}
-            className="mt-6 space-y-4"
-          >
-            {!loginMode && (
-              <>
-                <div>
-                  <label
-                    className={`mb-1.5 block text-sm font-semibold ${
-                      dark
-                        ? "text-slate-300"
-                        : "text-gray-700"
-                    }`}
-                  >
-                    Full name
-                  </label>
-
-                  <input
-                    required
-                    value={name}
-                    onChange={(event) =>
-                      setName(
-                        event.target.value
-                      )
-                    }
-                    placeholder="Enter your full name"
-                    className="field"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    className={`mb-1.5 block text-sm font-semibold ${
-                      dark
-                        ? "text-slate-300"
-                        : "text-gray-700"
-                    }`}
-                  >
-                    Phone number
-                  </label>
-
-                  <input
-                    value={phone}
-                    onChange={(event) =>
-                      setPhone(
-                        event.target.value
-                      )
-                    }
-                    placeholder="01XXXXXXXXX"
-                    className="field"
-                  />
-                </div>
-              </>
-            )}
-
-            <div>
-              <label
-                className={`mb-1.5 block text-sm font-semibold ${
-                  dark
-                    ? "text-slate-300"
-                    : "text-gray-700"
-                }`}
-              >
-                Email address
-              </label>
-
-              <input
-                required
-                type="email"
-                value={email}
-                onChange={(event) =>
-                  setEmail(
-                    event.target.value
-                  )
-                }
-                placeholder="you@example.com"
-                autoComplete="email"
-                className="field"
-              />
-            </div>
-
-            <div>
-              <label
-                className={`mb-1.5 block text-sm font-semibold ${
-                  dark
-                    ? "text-slate-300"
-                    : "text-gray-700"
-                }`}
-              >
-                Password
-              </label>
-
-              <input
-                required
-                minLength={6}
-                type="password"
-                value={password}
-                onChange={(event) =>
-                  setPassword(
-                    event.target.value
-                  )
-                }
-                placeholder="At least 6 characters"
-                autoComplete={
-                  loginMode
-                    ? "current-password"
-                    : "new-password"
-                }
-                className="field"
-              />
-            </div>
-
-            {!loginMode && (
-              <div>
-                <label
-                  className={`mb-1.5 block text-sm font-semibold ${
-                    dark
-                      ? "text-slate-300"
-                      : "text-gray-700"
-                  }`}
-                >
-                  Confirm password
-                </label>
-
-                <input
-                  required
-                  minLength={6}
-                  type="password"
-                  value={
-                    confirmPassword
-                  }
-                  onChange={(event) =>
-                    setConfirmPassword(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Enter your password again"
-                  autoComplete="new-password"
-                  className="field"
-                />
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3.5 font-bold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? (
-                <>
-                  <Loader2
-                    size={18}
-                    className="animate-spin"
-                  />
-
-                  {loginMode
-                    ? "Signing in..."
-                    : "Creating account..."}
-                </>
-              ) : (
-                <>
-                  <LogIn size={18} />
-
-                  {loginMode
-                    ? "Sign In"
-                    : "Create Account"}
-                </>
-              )}
-            </button>
-          </form>
-
-          <div className="my-5 flex items-center gap-3">
-            <div
-              className={`h-px flex-1 ${
-                dark
-                  ? "bg-slate-800"
-                  : "bg-gray-200"
-              }`}
-            />
-
-            <span className="text-xs text-gray-400">
-              AUCTIONBD
-            </span>
-
-            <div
-              className={`h-px flex-1 ${
-                dark
-                  ? "bg-slate-800"
-                  : "bg-gray-200"
-              }`}
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setLoginMode(
-                (current) => !current
-              );
-              setError("");
-              setSuccess("");
-            }}
-            className={`w-full rounded-xl border px-4 py-3 text-sm font-semibold transition ${
-              dark
-                ? "border-slate-700 text-slate-300 hover:border-orange-400 hover:bg-orange-400/10 hover:text-orange-400"
-                : "border-gray-200 text-gray-700 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"
-            }`}
-          >
-            {loginMode
-              ? "Don't have an account? Create one"
-              : "Already have an account? Sign in"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* =========================================================
-SELLER PAGE
+   SELLER PAGE
 ========================================================= */
 
 function SellerPage({
@@ -1107,27 +995,22 @@ function SellerPage({
   onBack,
   onLogin,
   dark,
+  notify,
 }) {
-  const [form, setForm] =
-    useState({
-      title: "",
-      category: "",
-      categoryGroup: "",
-      condition: "",
-      description: "",
-      expectedPrice: "",
-      location: "",
-      notes: "",
-    });
+  const [form, setForm] = useState({
+    title: "",
+    category: "",
+    categoryGroup: "",
+    condition: "",
+    description: "",
+    expectedPrice: "",
+    location: "",
+    notes: "",
+  });
 
-  const [images, setImages] =
-    useState([]);
-
-  const [videos, setVideos] =
-    useState([]);
-
-  const [requests, setRequests] =
-    useState([]);
+  const [images, setImages] = useState([]);
+  const [videos, setVideos] = useState([]);
+  const [requests, setRequests] = useState([]);
 
   const [loading, setLoading] =
     useState(false);
@@ -1135,17 +1018,12 @@ function SellerPage({
   const [loadingRequests, setLoadingRequests] =
     useState(false);
 
-  const [message, setMessage] =
-    useState("");
+  const imageInput = useRef(null);
+  const videoInput = useRef(null);
 
-  const [error, setError] =
-    useState("");
-
-  const imageInput =
-    useRef(null);
-
-  const videoInput =
-    useRef(null);
+  const panel = dark
+    ? "border-slate-800 bg-slate-900"
+    : "border-gray-200 bg-white";
 
   const loadRequests =
     useCallback(async () => {
@@ -1158,33 +1036,134 @@ function SellerPage({
           "/api/seller-requests/mine"
         );
 
-        setRequests(
-          Array.isArray(data)
-            ? data
-            : data?.requests || []
-        );
-      } catch (err) {
+        const list = Array.isArray(data)
+          ? data
+          : data?.requests || [];
+
+        setRequests(list);
+      } catch (error) {
         console.error(
-          "Seller requests error:",
-          err
+          "Seller requests:",
+          error
         );
+
+        if (error.status === 401) {
+          clearAuth();
+          onLogin();
+        }
       } finally {
         setLoadingRequests(false);
       }
-    }, []);
+    }, [onLogin]);
 
   useEffect(() => {
     loadRequests();
   }, [loadRequests]);
 
-  const update = (
-    key,
-    value
-  ) => {
+  const update = (key, value) => {
     setForm((current) => ({
       ...current,
       [key]: value,
     }));
+  };
+
+  const selectImages = (event) => {
+    const selected = Array.from(
+      event.target.files || []
+    );
+
+    const valid = [];
+    const rejected = [];
+
+    for (const file of selected) {
+      if (!file.type.startsWith("image/")) {
+        rejected.push(file.name);
+        continue;
+      }
+
+      if (file.size > MAX_IMAGE_SIZE) {
+        rejected.push(
+          `${file.name} (too large)`
+        );
+        continue;
+      }
+
+      valid.push(file);
+    }
+
+    setImages((current) => {
+      const combined = [
+        ...current,
+        ...valid,
+      ];
+
+      const unique = combined.filter(
+        (file, index, array) =>
+          array.findIndex(
+            (item) =>
+              item.name === file.name &&
+              item.size === file.size &&
+              item.lastModified ===
+                file.lastModified
+          ) === index
+      );
+
+      return unique.slice(0, MAX_IMAGES);
+    });
+
+    if (rejected.length) {
+      notify(
+        `Some photos were skipped. Maximum ${MAX_IMAGES} photos and 10MB per photo.`,
+        "error"
+      );
+    }
+
+    event.target.value = "";
+  };
+
+  const selectVideos = (event) => {
+    const selected = Array.from(
+      event.target.files || []
+    );
+
+    const valid = [];
+
+    for (const file of selected) {
+      if (!file.type.startsWith("video/")) {
+        continue;
+      }
+
+      if (file.size <= MAX_VIDEO_SIZE) {
+        valid.push(file);
+      }
+    }
+
+    setVideos((current) =>
+      [...current, ...valid].slice(
+        0,
+        MAX_VIDEOS
+      )
+    );
+
+    event.target.value = "";
+  };
+
+  const removeImage = (index) => {
+    setImages((current) =>
+      current.filter(
+        (_, itemIndex) =>
+          itemIndex !== index
+      )
+    );
+  };
+
+  const removeVideo = (index) => {
+    setVideos((current) =>
+      current.filter(
+        (_, itemIndex) =>
+          itemIndex !== index
+      )
+    );
   };
 
   const submit = async (event) => {
@@ -1196,14 +1175,37 @@ function SellerPage({
     }
 
     if (!images.length) {
-      setError(
-        "Please upload at least one photo."
+      notify(
+        "Please upload at least one photo.",
+        "error"
       );
       return;
     }
 
-    setError("");
-    setMessage("");
+    if (!form.title.trim()) {
+      notify(
+        "Please enter an item title.",
+        "error"
+      );
+      return;
+    }
+
+    if (!form.categoryGroup) {
+      notify(
+        "Please select a category.",
+        "error"
+      );
+      return;
+    }
+
+    if (!form.description.trim()) {
+      notify(
+        "Please describe your item.",
+        "error"
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -1216,17 +1218,11 @@ function SellerPage({
       );
 
       images.forEach((file) => {
-        body.append(
-          "images",
-          file
-        );
+        body.append("images", file);
       });
 
       videos.forEach((file) => {
-        body.append(
-          "videos",
-          file
-        );
+        body.append("videos", file);
       });
 
       await api(
@@ -1235,10 +1231,6 @@ function SellerPage({
           method: "POST",
           body,
         }
-      );
-
-      setMessage(
-        "Your auction request has been submitted successfully."
       );
 
       setForm({
@@ -1255,68 +1247,40 @@ function SellerPage({
       setImages([]);
       setVideos([]);
 
-      if (imageInput.current) {
-        imageInput.current.value =
-          "";
-      }
-
-      if (videoInput.current) {
-        videoInput.current.value =
-          "";
-      }
-
       await loadRequests();
-    } catch (err) {
+
+      notify(
+        "Your auction request was submitted successfully.",
+        "success"
+      );
+    } catch (error) {
       console.error(
-        "Seller request error:",
-        err
+        "Seller submission:",
+        error
       );
 
-      const text =
-        err?.message?.toLowerCase() ||
-        "";
-
-      if (
-        text.includes("login") ||
-        text.includes("session") ||
-        text.includes("token") ||
-        text.includes("unauthorized")
-      ) {
+      if (error.status === 401) {
         clearAuth();
         onLogin();
-      } else {
-        setError(
-          err?.message ||
-            "Unable to submit your request."
-        );
+        return;
       }
+
+      notify(
+        error?.message ||
+          "Unable to submit your request.",
+        "error"
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const panel = dark
-    ? "border-slate-800 bg-slate-900"
-    : "border-gray-200 bg-white";
-
-  const heading = dark
-    ? "text-white"
-    : "text-gray-900";
-
-  const muted = dark
-    ? "text-slate-400"
-    : "text-gray-500";
-
   if (!user && !getToken()) {
     return (
-      <main className="mx-auto max-w-7xl px-6 py-12">
+      <main className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
         <button
           onClick={onBack}
-          className={`mb-7 text-sm ${
-            dark
-              ? "text-slate-400"
-              : "text-gray-500"
-          }`}
+          className="mb-8 text-sm font-semibold text-orange-500"
         >
           ← Back to auctions
         </button>
@@ -1329,17 +1293,12 @@ function SellerPage({
             className="mx-auto text-orange-500"
           />
 
-          <h1
-            className={`mt-5 text-3xl font-black ${heading}`}
-          >
+          <h1 className="mt-5 text-3xl font-black">
             Login required
           </h1>
 
-          <p
-            className={`mt-3 ${muted}`}
-          >
-            Create an account or sign in
-            before listing your item.
+          <p className="mt-3 text-gray-500">
+            Sign in before listing your item.
           </p>
 
           <button
@@ -1354,224 +1313,245 @@ function SellerPage({
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-12">
+    <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:py-14">
       <button
         onClick={onBack}
-        className={`mb-7 text-sm ${
-          dark
-            ? "text-slate-400 hover:text-white"
-            : "text-gray-500 hover:text-gray-900"
-        }`}
+        className="mb-8 text-sm font-semibold text-orange-500"
       >
         ← Back to auctions
       </button>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
         <section>
-          <div className="mb-8">
-            <p className="text-sm font-bold text-orange-500">
-              SELL ON AUCTIONBD
-            </p>
+          <p className="text-sm font-bold text-orange-500">
+            SELL ON AUCTIONBD
+          </p>
 
-            <h1
-              className={`mt-2 text-4xl font-black ${heading}`}
-            >
-              List your item
-            </h1>
+          <h1 className="mt-2 text-4xl font-black">
+            List your item
+          </h1>
 
-            <p
-              className={`mt-3 ${muted}`}
-            >
-              Upload photos, provide the
-              details and submit your item
-              for review.
-            </p>
-          </div>
-
-          {message && (
-            <div
-              className={`mb-6 flex gap-3 rounded-2xl border p-4 ${
-                dark
-                  ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
-              }`}
-            >
-              <CheckCircle2
-                size={20}
-                className="shrink-0"
-              />
-
-              <span>{message}</span>
-            </div>
-          )}
-
-          {error && (
-            <div
-              className={`mb-6 flex gap-3 rounded-2xl border p-4 ${
-                dark
-                  ? "border-red-400/20 bg-red-400/10 text-red-300"
-                  : "border-red-200 bg-red-50 text-red-700"
-              }`}
-            >
-              <AlertCircle
-                size={20}
-                className="shrink-0"
-              />
-
-              <span>{error}</span>
-            </div>
-          )}
+          <p className="mt-3 text-gray-500">
+            Upload photos directly from your
+            phone, provide the details and
+            submit your item for review.
+          </p>
 
           <form
             onSubmit={submit}
-            className={`space-y-5 rounded-3xl border p-6 shadow-sm ${panel}`}
+            className={`mt-7 space-y-6 rounded-3xl border p-6 shadow-sm ${panel}`}
           >
-            <input
-              required
-              value={form.title}
-              onChange={(event) =>
-                update(
-                  "title",
-                  event.target.value
-                )
-              }
-              placeholder="Item title"
-              className="field"
-            />
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                Item title *
+              </label>
 
-            <div className="grid gap-4 sm:grid-cols-2">
               <input
                 required
-                value={form.category}
-                onChange={(event) =>
+                maxLength={150}
+                value={form.title}
+                onChange={(e) =>
                   update(
-                    "category",
-                    event.target.value
+                    "title",
+                    e.target.value
                   )
                 }
-                placeholder="Category"
+                placeholder="e.g. iPhone 15 Pro Max"
                 className="field"
               />
+            </div>
 
-              <select
-                required
-                value={
-                  form.categoryGroup
-                }
-                onChange={(event) =>
-                  update(
-                    "categoryGroup",
-                    event.target.value
-                  )
-                }
-                className="field"
-              >
-                <option value="">
-                  Category group
-                </option>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-bold">
+                  Item category *
+                </label>
 
-                {CATEGORIES.filter(
-                  (item) =>
-                    item !== "All"
-                ).map((item) => (
-                  <option
-                    key={item}
-                    value={item}
-                  >
-                    {item}
+                <input
+                  required
+                  value={form.category}
+                  onChange={(e) =>
+                    update(
+                      "category",
+                      e.target.value
+                    )
+                  }
+                  placeholder="e.g. Smartphones"
+                  className="field"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-bold">
+                  Category group *
+                </label>
+
+                <select
+                  required
+                  value={form.categoryGroup}
+                  onChange={(e) =>
+                    update(
+                      "categoryGroup",
+                      e.target.value
+                    )
+                  }
+                  className="field"
+                >
+                  <option value="">
+                    Select category
                   </option>
-                ))}
-              </select>
+
+                  {CATEGORIES.filter(
+                    (item) =>
+                      item !== "All"
+                  ).map((item) => (
+                    <option
+                      key={item}
+                      value={item}
+                    >
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <input
-                value={form.condition}
-                onChange={(event) =>
-                  update(
-                    "condition",
-                    event.target.value
-                  )
-                }
-                placeholder="Condition"
-                className="field"
-              />
+              <div>
+                <label className="mb-2 block text-sm font-bold">
+                  Condition
+                </label>
 
-              <input
-                type="number"
-                min="0"
-                value={
-                  form.expectedPrice
-                }
-                onChange={(event) =>
-                  update(
-                    "expectedPrice",
-                    event.target.value
-                  )
-                }
-                placeholder="Expected starting price (৳)"
-                className="field"
-              />
+                <input
+                  value={form.condition}
+                  onChange={(e) =>
+                    update(
+                      "condition",
+                      e.target.value
+                    )
+                  }
+                  placeholder="New / Used / Like new"
+                  className="field"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-bold">
+                  Starting price
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  value={
+                    form.expectedPrice
+                  }
+                  onChange={(e) =>
+                    update(
+                      "expectedPrice",
+                      e.target.value
+                    )
+                  }
+                  placeholder="৳ Starting price"
+                  className="field"
+                />
+              </div>
             </div>
-
-            <input
-              value={form.location}
-              onChange={(event) =>
-                update(
-                  "location",
-                  event.target.value
-                )
-              }
-              placeholder="Location"
-              className="field"
-            />
-
-            <textarea
-              required
-              value={
-                form.description
-              }
-              onChange={(event) =>
-                update(
-                  "description",
-                  event.target.value
-                )
-              }
-              placeholder="Describe your item"
-              rows={6}
-              className="field resize-none"
-            />
-
-            <textarea
-              value={form.notes}
-              onChange={(event) =>
-                update(
-                  "notes",
-                  event.target.value
-                )
-              }
-              placeholder="Additional notes (optional)"
-              rows={3}
-              className="field resize-none"
-            />
 
             <div>
-              <p
-                className={`mb-2 font-bold ${heading}`}
-              >
-                Photos *
+              <label className="mb-2 block text-sm font-bold">
+                Location
+              </label>
+
+              <input
+                value={form.location}
+                onChange={(e) =>
+                  update(
+                    "location",
+                    e.target.value
+                  )
+                }
+                placeholder="e.g. Chattogram"
+                className="field"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                Description *
+              </label>
+
+              <textarea
+                required
+                rows={6}
+                maxLength={5000}
+                value={
+                  form.description
+                }
+                onChange={(e) =>
+                  update(
+                    "description",
+                    e.target.value
+                  )
+                }
+                placeholder="Describe the item, condition, accessories, defects, warranty, etc."
+                className="field resize-none"
+              />
+
+              <p className="mt-1 text-right text-xs text-gray-400">
+                {form.description.length}
+                /5000
               </p>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold">
+                Additional notes
+              </label>
+
+              <textarea
+                rows={3}
+                maxLength={2000}
+                value={form.notes}
+                onChange={(e) =>
+                  update(
+                    "notes",
+                    e.target.value
+                  )
+                }
+                placeholder="Anything else the admin or buyer should know?"
+                className="field resize-none"
+              />
+            </div>
+
+            {/* PHOTOS */}
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="font-bold">
+                  Photos *
+                </p>
+
+                <span className="text-xs text-gray-400">
+                  {images.length}/
+                  {MAX_IMAGES}
+                </span>
+              </div>
 
               <button
                 type="button"
+                disabled={
+                  images.length >=
+                  MAX_IMAGES
+                }
                 onClick={() =>
                   imageInput.current?.click()
                 }
-                className={`flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 transition ${
+                className={`flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 ${
                   dark
-                    ? "border-slate-700 bg-slate-950 text-slate-400 hover:border-orange-400 hover:bg-orange-400/10 hover:text-orange-400"
-                    : "border-gray-300 bg-gray-50 text-gray-500 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-500"
-                }`}
+                    ? "border-slate-700 bg-slate-950 text-slate-400"
+                    : "border-gray-300 bg-gray-50 text-gray-500"
+                } disabled:opacity-50`}
               >
                 <Upload size={22} />
                 Choose photos from your phone
@@ -1583,47 +1563,89 @@ function SellerPage({
                 accept="image/*"
                 multiple
                 hidden
-                onChange={(event) =>
-                  setImages(
-                    Array.from(
-                      event.target.files ||
-                        []
-                    )
-                  )
-                }
+                onChange={selectImages}
               />
 
               {images.length > 0 && (
-                <p className="mt-2 text-sm font-semibold text-orange-500">
-                  {images.length} photo
-                  {images.length === 1
-                    ? ""
-                    : "s"}{" "}
-                  selected
-                </p>
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {images.map(
+                    (file, index) => (
+                      <div
+                        key={`${file.name}-${file.size}-${index}`}
+                        className="relative overflow-hidden rounded-xl border"
+                      >
+                        <img
+                          src={URL.createObjectURL(
+                            file
+                          )}
+                          alt={`Upload ${
+                            index + 1
+                          }`}
+                          className="aspect-square w-full object-cover"
+                          onLoad={(event) =>
+                            URL.revokeObjectURL(
+                              event
+                                .currentTarget
+                                .src
+                            )
+                          }
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeImage(
+                              index
+                            )
+                          }
+                          className="absolute right-2 top-2 rounded-full bg-black/70 p-1.5 text-white"
+                        >
+                          <X size={15} />
+                        </button>
+
+                        {index === 0 && (
+                          <span className="absolute bottom-2 left-2 rounded bg-black/70 px-2 py-1 text-[10px] font-bold text-white">
+                            MAIN
+                          </span>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
               )}
             </div>
 
+            {/* VIDEO */}
+
             <div>
-              <p
-                className={`mb-2 font-bold ${heading}`}
-              >
-                Video{" "}
-                <span className="font-normal text-gray-400">
-                  (optional)
+              <div className="mb-2 flex items-center justify-between">
+                <p className="font-bold">
+                  Video{" "}
+                  <span className="font-normal text-gray-400">
+                    optional
+                  </span>
+                </p>
+
+                <span className="text-xs text-gray-400">
+                  {videos.length}/
+                  {MAX_VIDEOS}
                 </span>
-              </p>
+              </div>
 
               <button
                 type="button"
+                disabled={
+                  videos.length >=
+                  MAX_VIDEOS
+                }
                 onClick={() =>
                   videoInput.current?.click()
                 }
-                className={`flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 transition ${
+                className={`flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 ${
                   dark
-                    ? "border-slate-700 bg-slate-950 text-slate-400 hover:border-orange-400 hover:bg-orange-400/10 hover:text-orange-400"
-                    : "border-gray-300 bg-gray-50 text-gray-500 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-500"
-                }`}
+                    ? "border-slate-700 bg-slate-950 text-slate-400"
+                    : "border-gray-300 bg-gray-50 text-gray-500"
+                } disabled:opacity-50`}
               >
                 <Upload size={20} />
                 Choose video
@@ -1635,33 +1657,58 @@ function SellerPage({
                 accept="video/*"
                 multiple
                 hidden
-                onChange={(event) =>
-                  setVideos(
-                    Array.from(
-                      event.target.files ||
-                        []
-                    )
-                  )
-                }
+                onChange={selectVideos}
               />
 
               {videos.length > 0 && (
-                <p
-                  className={`mt-2 text-sm ${muted}`}
-                >
-                  {videos.length} video
-                  {videos.length === 1
-                    ? ""
-                    : "s"}{" "}
-                  selected
-                </p>
+                <div className="mt-3 space-y-2">
+                  {videos.map(
+                    (file, index) => (
+                      <div
+                        key={`${file.name}-${file.size}-${index}`}
+                        className={`flex items-center justify-between rounded-xl border p-3 ${
+                          dark
+                            ? "border-slate-800"
+                            : "border-gray-200"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">
+                            {file.name}
+                          </p>
+
+                          <p className="text-xs text-gray-400">
+                            {(
+                              file.size /
+                              1024 /
+                              1024
+                            ).toFixed(1)}{" "}
+                            MB
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeVideo(
+                              index
+                            )
+                          }
+                          className="rounded-full p-2 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                        >
+                          <X size={17} />
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
               )}
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-4 font-black text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-4 font-black text-white hover:bg-orange-600 disabled:opacity-50"
             >
               {loading && (
                 <Loader2
@@ -1677,25 +1724,41 @@ function SellerPage({
           </form>
         </section>
 
+        {/* REQUESTS */}
+
         <aside>
           <div
             className={`rounded-3xl border p-6 shadow-sm lg:sticky lg:top-24 ${panel}`}
           >
-            <h2
-              className={`text-xl font-bold ${heading}`}
-            >
-              Your requests
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold">
+                Your requests
+              </h2>
+
+              <button
+                onClick={loadRequests}
+                disabled={
+                  loadingRequests
+                }
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800"
+              >
+                <RefreshCw
+                  size={17}
+                  className={
+                    loadingRequests
+                      ? "animate-spin"
+                      : ""
+                  }
+                />
+              </button>
+            </div>
 
             {loadingRequests ? (
-              <div className="mt-6 flex justify-center">
+              <div className="mt-8 flex justify-center">
                 <Loader2 className="animate-spin text-orange-500" />
               </div>
-            ) : requests.length ===
-              0 ? (
-              <div
-                className={`mt-8 text-center text-sm ${muted}`}
-              >
+            ) : requests.length === 0 ? (
+              <div className="mt-8 text-center text-sm text-gray-500">
                 <Package
                   size={35}
                   className="mx-auto mb-3 text-gray-300"
@@ -1718,38 +1781,47 @@ function SellerPage({
                           : "border-gray-200"
                       }`}
                     >
-                      <p
-                        className={`font-bold ${heading}`}
-                      >
+                      <p className="font-bold">
                         {request.title}
                       </p>
 
-                      <p className="mt-2 text-xs font-semibold capitalize text-orange-500">
-                        {String(
-                          request.status ||
-                            ""
-                        ).replace(
-                          /_/g,
-                          " "
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold capitalize text-orange-500">
+                          {String(
+                            request.status ||
+                              "pending"
+                          ).replace(
+                            /_/g,
+                            " "
+                          )}
+                        </span>
+
+                        {request.createdAt && (
+                          <span className="text-[10px] text-gray-400">
+                            {formatDate(
+                              request.createdAt
+                            )}
+                          </span>
                         )}
-                      </p>
+                      </div>
 
                       {request.rejectionReason && (
-                        <p className="mt-2 text-xs text-red-500">
+                        <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600">
+                          <b>
+                            Rejected:
+                          </b>{" "}
                           {
                             request.rejectionReason
                           }
-                        </p>
+                        </div>
                       )}
 
                       {request.adminNotes && (
-                        <p
-                          className={`mt-2 text-xs ${muted}`}
-                        >
+                        <div className="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-slate-950">
                           {
                             request.adminNotes
                           }
-                        </p>
+                        </div>
                       )}
                     </div>
                   )
@@ -1764,212 +1836,180 @@ function SellerPage({
 }
 
 /* =========================================================
-MAIN APP
+   NAVBAR
 ========================================================= */
 
-function AuctionHome() {
-  const [auctions, setAuctions] =
-    useState([]);
-
-  const [selectedAuction, setSelectedAuction] =
-    useState(null);
-
-  const [page, setPage] =
-    useState("home");
-
-  const [authMode, setAuthMode] =
-    useState(null);
-
-  const [user, setUser] =
-    useState(getSavedUser);
-
-  const [search, setSearch] =
-    useState("");
-
-  const [category, setCategory] =
-    useState("All");
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState("");
-
-  const [dark, setDark] =
-    useState(() => {
-      try {
-        const saved =
-          localStorage.getItem(
-            THEME_KEY
-          );
-
-        if (saved === "dark")
-          return true;
-
-        if (saved === "light")
-          return false;
-
-        return (
-          window.matchMedia?.(
-            "(prefers-color-scheme: dark)"
-          ).matches || false
-        );
-      } catch {
-        return false;
-      }
-    });
-
-  const [favorites, setFavorites] =
-    useState(() => {
-      try {
-        return JSON.parse(
-          localStorage.getItem(
-            FAVORITES_KEY
-          ) || "[]"
-        );
-      } catch {
-        return [];
-      }
-    });
-
-  /* =======================================================
-  THEME
-  ======================================================= */
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        THEME_KEY,
-        dark ? "dark" : "light"
-      );
-    } catch {}
-
-    document.documentElement.style.colorScheme =
-      dark ? "dark" : "light";
-
-    document.body.style.backgroundColor =
-      dark ? "#020617" : "#ffffff";
-
-    document.body.style.color =
-      dark ? "#f8fafc" : "#111827";
-  }, [dark]);
-
-  /* =======================================================
-  LOAD AUCTIONS
-  ======================================================= */
-
-  const loadAuctions =
-    useCallback(async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const data = await api(
-          "/api/auctions?status=all",
-          {
-            method: "GET",
-            cache: "no-store",
+function Navbar({
+  user,
+  dark,
+  setDark,
+  onLogin,
+  onRegister,
+  onLogout,
+  onSeller,
+  scrollTo,
+}) {
+  return (
+    <header
+      className={`sticky top-0 z-40 border-b backdrop-blur ${
+        dark
+          ? "border-slate-800 bg-slate-950/95"
+          : "border-gray-200 bg-white/95"
+      }`}
+    >
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-4">
+        <button
+          onClick={() =>
+            window.scrollTo({
+              top: 0,
+              behavior: "smooth",
+            })
           }
-        );
+          className="flex shrink-0 items-center gap-2"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white">
+            <Gavel size={20} />
+          </div>
 
-        const list =
-          Array.isArray(data)
-            ? data
-            : Array.isArray(
-                data?.auctions
-              )
-            ? data.auctions
-            : [];
+          <div className="text-left">
+            <h1 className="text-lg font-black sm:text-xl">
+              AUCTION
+              <span className="text-orange-500">
+                BD
+              </span>
+            </h1>
 
-        setAuctions(
-          list.map(normalizeAuction)
-        );
-      } catch (err) {
-        console.error(
-          "Auction loading error:",
-          err
-        );
+            <p className="hidden text-[10px] tracking-[.25em] text-gray-400 sm:block">
+              BID. WIN. OWN.
+            </p>
+          </div>
+        </button>
 
-        setError(
-          err?.message ||
-            "Unable to load auctions."
-        );
-      } finally {
-        setLoading(false);
-      }
-    }, []);
+        <nav className="hidden gap-7 md:flex">
+          {[
+            ["Auctions", "auctions"],
+            ["Categories", "categories"],
+            ["How It Works", "how"],
+          ].map(([name, id]) => (
+            <button
+              key={id}
+              onClick={() => scrollTo(id)}
+              className="text-sm font-medium text-gray-500 hover:text-orange-500"
+            >
+              {name}
+            </button>
+          ))}
+        </nav>
 
-  useEffect(() => {
-    loadAuctions();
-  }, [loadAuctions]);
+        <div className="flex items-center gap-1.5">
+          <ThemeButton
+            dark={dark}
+            onClick={() =>
+              setDark((value) => !value)
+            }
+          />
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        FAVORITES_KEY,
-        JSON.stringify(favorites)
+          {user ? (
+            <>
+              <button
+                onClick={onSeller}
+                className="rounded-lg border border-orange-200 px-2.5 py-2 text-xs font-semibold text-orange-500 hover:bg-orange-50 sm:text-sm"
+              >
+                Sell Item
+              </button>
+
+              <button
+                onClick={onLogout}
+                title="Logout"
+                className="rounded-lg bg-gray-100 p-2 text-gray-600 dark:bg-slate-800 dark:text-gray-300"
+              >
+                <LogOut size={18} />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={onLogin}
+                className="rounded-lg px-2.5 py-2 text-xs font-semibold text-gray-700 hover:text-orange-500 sm:text-sm dark:text-gray-300"
+              >
+                Sign In
+              </button>
+
+              <button
+                onClick={onRegister}
+                className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-bold text-white hover:bg-orange-600 sm:text-sm"
+              >
+                Sign Up
+              </button>
+
+              <button
+                onClick={onSeller}
+                className="hidden rounded-lg border border-orange-500 px-3 py-2 text-sm font-bold text-orange-500 sm:block"
+              >
+                Sell Item
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* =========================================================
+   HOME
+========================================================= */
+
+function HomePage({
+  auctions,
+  loading,
+  error,
+  search,
+  setSearch,
+  category,
+  setCategory,
+  favorites,
+  onFavorite,
+  onOpenAuction,
+  onRefresh,
+  onSeller,
+  dark,
+}) {
+  const filteredAuctions = useMemo(() => {
+    const term = search
+      .trim()
+      .toLowerCase();
+
+    return auctions.filter((auction) => {
+      const searchable = [
+        auction.title,
+        auction.category,
+        auction.categoryGroup,
+        auction.description,
+        auction.seller,
+        auction.status,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch =
+        !term ||
+        searchable.includes(term);
+
+      const matchesCategory =
+        category === "All" ||
+        String(
+          auction.categoryGroup || ""
+        ).toLowerCase() ===
+          category.toLowerCase();
+
+      return (
+        matchesSearch &&
+        matchesCategory
       );
-    } catch {}
-  }, [favorites]);
-
-  /* =======================================================
-  FILTER
-  ======================================================= */
-
-  const filteredAuctions =
-    useMemo(() => {
-      const term =
-        search.trim().toLowerCase();
-
-      return auctions.filter(
-        (auction) => {
-          const searchable = [
-            auction.title,
-            auction.category,
-            auction.categoryGroup,
-            auction.description,
-            auction.seller,
-            auction.status,
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-
-          return (
-            searchable.includes(term) &&
-            (category === "All" ||
-              String(
-                auction.categoryGroup ||
-                  ""
-              ).toLowerCase() ===
-                category.toLowerCase())
-          );
-        }
-      );
-    }, [
-      auctions,
-      search,
-      category,
-    ]);
-
-  /* =======================================================
-  FAVORITES
-  ======================================================= */
-
-  const toggleFavorite =
-    useCallback((id) => {
-      setFavorites((current) =>
-        current.includes(id)
-          ? current.filter(
-              (item) => item !== id
-            )
-          : [...current, id]
-      );
-    }, []);
-
-  /* =======================================================
-  SCROLL
-  ======================================================= */
+    });
+  }, [auctions, search, category]);
 
   const scrollTo = (id) => {
     document
@@ -1980,457 +2020,38 @@ function AuctionHome() {
       });
   };
 
-  /* =======================================================
-  AUTH SUCCESS
-  ======================================================= */
-
-  const handleAuthSuccess = (
-    newUser
-  ) => {
-    const saved =
-      newUser || getSavedUser();
-
-    setUser(saved);
-    setAuthMode(null);
-  };
-
-  /* =======================================================
-  LOGOUT
-  ======================================================= */
-
-  const logout = () => {
-    clearAuth();
-    setUser(null);
-    setPage("home");
-    setSelectedAuction(null);
-  };
-
-  /* =======================================================
-  SELLER
-  ======================================================= */
-
-  const openSeller = () => {
-    if (!getToken()) {
-      setAuthMode("login");
-      return;
-    }
-
-    setPage("seller");
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  };
-
-  /* =======================================================
-  AUCTION DETAILS
-  ======================================================= */
-
-  if (selectedAuction) {
-    return (
-      <div
-        className={
-          dark
-            ? "min-h-screen bg-slate-950 text-white"
-            : "min-h-screen bg-white text-gray-900"
-        }
-      >
-        <GlobalStyles dark={dark} />
-
-        <AuctionDetails
-          auction={selectedAuction}
-          onBack={() => {
-            setSelectedAuction(null);
-            loadAuctions();
-          }}
-          onLogin={() =>
-            setAuthMode("login")
-          }
-          dark={dark}
-        />
-
-        {authMode && (
-          <AuthModal
-            mode={authMode}
-            onClose={() =>
-              setAuthMode(null)
-            }
-            onSuccess={
-              handleAuthSuccess
-            }
-            dark={dark}
-          />
-        )}
-
-        {/* Theme button on details page */}
-        <button
-          type="button"
-          onClick={() =>
-            setDark((value) => !value)
-          }
-          title={
-            dark
-              ? "Switch to light mode"
-              : "Switch to dark mode"
-          }
-          className={`fixed right-4 top-4 z-[100] flex h-11 w-11 items-center justify-center rounded-full border shadow-lg backdrop-blur ${
-            dark
-              ? "border-slate-700 bg-slate-900 text-amber-400"
-              : "border-gray-200 bg-white text-slate-700"
-          }`}
-        >
-          {dark ? (
-            <Sun size={19} />
-          ) : (
-            <Moon size={19} />
-          )}
-        </button>
-      </div>
-    );
-  }
-
-  /* =======================================================
-  SELLER PAGE
-  ======================================================= */
-
-  if (page === "seller") {
-    return (
-      <div
-        className={`min-h-screen ${
-          dark
-            ? "bg-slate-950 text-white"
-            : "bg-white text-gray-900"
-        }`}
-      >
-        <GlobalStyles dark={dark} />
-
-        <header
-          className={`sticky top-0 z-40 border-b backdrop-blur ${
-            dark
-              ? "border-slate-800 bg-slate-950/95"
-              : "border-gray-200 bg-white/95"
-          }`}
-        >
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-            <button
-              onClick={() =>
-                setPage("home")
-              }
-              className={`text-xl font-black ${
-                dark
-                  ? "text-white"
-                  : "text-gray-900"
-              }`}
-            >
-              AUCTION
-              <span className="text-orange-500">
-                BD
-              </span>
-            </button>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setDark(
-                    (value) => !value
-                  )
-                }
-                className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
-                  dark
-                    ? "border-slate-700 bg-slate-900 text-amber-400"
-                    : "border-gray-200 bg-white text-slate-700"
-                }`}
-              >
-                {dark ? (
-                  <Sun size={18} />
-                ) : (
-                  <Moon size={18} />
-                )}
-              </button>
-
-              <button
-                onClick={logout}
-                className={`flex items-center gap-2 text-sm ${
-                  dark
-                    ? "text-slate-400 hover:text-white"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
-                <LogOut size={17} />
-
-                <span className="hidden sm:inline">
-                  Logout
-                </span>
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <SellerPage
-          user={user}
-          onBack={() =>
-            setPage("home")
-          }
-          onLogin={() =>
-            setAuthMode("login")
-          }
-          dark={dark}
-        />
-
-        {authMode && (
-          <AuthModal
-            mode={authMode}
-            onClose={() =>
-              setAuthMode(null)
-            }
-            onSuccess={
-              handleAuthSuccess
-            }
-            dark={dark}
-          />
-        )}
-      </div>
-    );
-  }
-
-  /* =======================================================
-  HOME
-  ======================================================= */
-
   return (
-    <div
-      className={`min-h-screen transition-colors duration-200 ${
-        dark
-          ? "bg-slate-950 text-white"
-          : "bg-white text-gray-900"
-      }`}
-    >
-      <GlobalStyles dark={dark} />
-
-      {/* HEADER */}
-
-      <header
-        className={`sticky top-0 z-40 border-b backdrop-blur ${
-          dark
-            ? "border-slate-800 bg-slate-950/95"
-            : "border-gray-200 bg-white/95"
-        }`}
-      >
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 sm:py-4">
-          {/* LOGO */}
-
-          <button
-            onClick={() =>
-              window.scrollTo({
-                top: 0,
-                behavior: "smooth",
-              })
-            }
-            className="flex shrink-0 items-center gap-2 sm:gap-3"
-          >
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white sm:h-10 sm:w-10">
-              <Gavel size={20} />
-            </div>
-
-            <div className="text-left">
-              <h1
-                className={`text-lg font-black sm:text-xl ${
-                  dark
-                    ? "text-white"
-                    : "text-gray-900"
-                }`}
-              >
-                AUCTION
-                <span className="text-orange-500">
-                  BD
-                </span>
-              </h1>
-
-              <p className="hidden text-[10px] tracking-[.25em] text-gray-400 sm:block">
-                BID. WIN. OWN.
-              </p>
-            </div>
-          </button>
-
-          {/* DESKTOP NAV */}
-
-          <nav className="hidden gap-7 md:flex">
-            {[
-              [
-                "Auctions",
-                "auctions",
-              ],
-              [
-                "Categories",
-                "categories",
-              ],
-              [
-                "How It Works",
-                "how",
-              ],
-            ].map(
-              ([name, id]) => (
-                <button
-                  key={id}
-                  onClick={() =>
-                    scrollTo(id)
-                  }
-                  className={`text-sm font-medium transition ${
-                    dark
-                      ? "text-slate-400 hover:text-orange-400"
-                      : "text-gray-500 hover:text-orange-500"
-                  }`}
-                >
-                  {name}
-                </button>
-              )
-            )}
-          </nav>
-
-          {/* RIGHT SIDE */}
-
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* THEME */}
-
-            <button
-              type="button"
-              onClick={() =>
-                setDark(
-                  (value) => !value
-                )
-              }
-              title={
-                dark
-                  ? "Switch to light mode"
-                  : "Switch to dark mode"
-              }
-              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition sm:h-10 sm:w-10 ${
-                dark
-                  ? "border-slate-700 bg-slate-900 text-amber-400 hover:bg-slate-800"
-                  : "border-gray-200 bg-white text-slate-700 hover:bg-gray-50"
-              }`}
-            >
-              {dark ? (
-                <Sun size={18} />
-              ) : (
-                <Moon size={18} />
-              )}
-            </button>
-
-            {user ? (
-              <>
-                <button
-                  onClick={openSeller}
-                  className="rounded-lg border border-orange-200 px-2.5 py-2 text-xs font-semibold text-orange-500 transition hover:bg-orange-50 sm:px-3 sm:text-sm"
-                >
-                  Sell Item
-                </button>
-
-                <button
-                  onClick={logout}
-                  className={`rounded-lg p-2 transition ${
-                    dark
-                      ? "bg-slate-900 text-slate-300 hover:bg-slate-800"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                  title="Logout"
-                >
-                  <LogOut size={18} />
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() =>
-                    setAuthMode(
-                      "login"
-                    )
-                  }
-                  className={`rounded-lg px-2.5 py-2 text-xs font-semibold transition sm:px-3 sm:text-sm ${
-                    dark
-                      ? "text-slate-300 hover:bg-orange-400/10 hover:text-orange-400"
-                      : "text-gray-700 hover:bg-orange-50 hover:text-orange-500"
-                  }`}
-                >
-                  Sign In
-                </button>
-
-                <button
-                  onClick={() =>
-                    setAuthMode(
-                      "register"
-                    )
-                  }
-                  className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-bold text-white transition hover:bg-orange-600 sm:px-4 sm:text-sm"
-                >
-                  Sign Up
-                </button>
-
-                <button
-                  onClick={openSeller}
-                  className="hidden rounded-lg border border-orange-500 px-3 py-2 text-xs font-bold text-orange-500 transition hover:bg-orange-50 sm:block sm:text-sm"
-                >
-                  Sell Item
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
-
+    <>
       {/* HERO */}
 
       <section className="mx-auto max-w-7xl px-6 py-16 sm:py-20">
         <div className="max-w-3xl">
-          <div
-            className={`mb-5 inline-flex rounded-full px-4 py-2 text-sm font-semibold ${
-              dark
-                ? "bg-orange-400/10 text-orange-400"
-                : "bg-orange-50 text-orange-500"
-            }`}
-          >
+          <div className="mb-5 inline-flex rounded-full bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-500">
             🔥 Live auctions happening now
           </div>
 
-          <h2
-            className={`text-5xl font-black tracking-tight sm:text-6xl ${
-              dark
-                ? "text-white"
-                : "text-gray-900"
-            }`}
-          >
+          <h2 className="text-5xl font-black tracking-tight sm:text-6xl">
             Find it.
             <br />
-
             <span className="text-orange-500">
               Bid for it.
             </span>
-
             <br />
-
             Make it yours.
           </h2>
 
-          <p
-            className={`mt-5 max-w-2xl text-lg leading-8 ${
-              dark
-                ? "text-slate-400"
-                : "text-gray-500"
-            }`}
-          >
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-gray-500">
             Bangladesh&apos;s digital
             auction marketplace.
-            Discover products and win
-            amazing deals.
+            Discover products, place
+            competitive bids and win.
           </p>
 
           <button
             onClick={() =>
               scrollTo("auctions")
             }
-            className="mt-8 flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 font-bold text-white shadow-sm transition hover:bg-orange-600"
+            className="mt-8 flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 font-bold text-white hover:bg-orange-600"
           >
             Explore Auctions
             <ArrowRight size={18} />
@@ -2442,7 +2063,7 @@ function AuctionHome() {
 
       <section className="mx-auto max-w-7xl px-6">
         <div
-          className={`flex rounded-2xl border p-2 shadow-sm sm:p-3 ${
+          className={`flex rounded-2xl border p-2 shadow-sm ${
             dark
               ? "border-slate-800 bg-slate-900"
               : "border-gray-200 bg-white"
@@ -2451,22 +2072,18 @@ function AuctionHome() {
           <div className="flex flex-1 items-center gap-3 px-3">
             <Search
               size={20}
-              className="shrink-0 text-gray-400"
+              className="text-gray-400"
             />
 
             <input
               value={search}
-              onChange={(event) =>
+              onChange={(e) =>
                 setSearch(
-                  event.target.value
+                  e.target.value
                 )
               }
               placeholder="Search auctions..."
-              className={`w-full bg-transparent py-2 outline-none ${
-                dark
-                  ? "text-white placeholder:text-slate-600"
-                  : "text-gray-900 placeholder:text-gray-400"
-              }`}
+              className="w-full bg-transparent py-2 outline-none"
             />
 
             {search && (
@@ -2474,7 +2091,7 @@ function AuctionHome() {
                 onClick={() =>
                   setSearch("")
                 }
-                className="text-gray-400 hover:text-gray-900"
+                className="text-gray-400"
               >
                 <X size={18} />
               </button>
@@ -2482,14 +2099,10 @@ function AuctionHome() {
           </div>
 
           <button
-            onClick={loadAuctions}
+            onClick={onRefresh}
             disabled={loading}
-            className={`rounded-xl p-3 transition ${
-              dark
-                ? "text-slate-500 hover:bg-slate-800 hover:text-white"
-                : "text-gray-400 hover:bg-gray-100 hover:text-gray-900"
-            }`}
-            title="Refresh"
+            title="Refresh auctions"
+            className="rounded-xl p-3 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800"
           >
             <RefreshCw
               size={18}
@@ -2510,24 +2123,12 @@ function AuctionHome() {
         className="mx-auto max-w-7xl scroll-mt-24 px-6 py-16"
       >
         <div className="mb-8">
-          <h3
-            className={`text-3xl font-bold ${
-              dark
-                ? "text-white"
-                : "text-gray-900"
-            }`}
-          >
+          <h3 className="text-3xl font-bold">
             Auctions
           </h3>
 
           {!loading && !error && (
-            <p
-              className={`mt-1 text-sm ${
-                dark
-                  ? "text-slate-500"
-                  : "text-gray-500"
-              }`}
-            >
+            <p className="mt-1 text-sm text-gray-500">
               {filteredAuctions.length}{" "}
               auction
               {filteredAuctions.length ===
@@ -2542,9 +2143,9 @@ function AuctionHome() {
         {loading && (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {[1, 2, 3, 4].map(
-              (item) => (
+              (id) => (
                 <Skeleton
-                  key={item}
+                  key={id}
                   dark={dark}
                 />
               )
@@ -2553,26 +2154,19 @@ function AuctionHome() {
         )}
 
         {error && !loading && (
-          <div
-            className={`rounded-2xl border p-10 text-center ${
-              dark
-                ? "border-red-400/20 bg-red-400/10"
-                : "border-red-200 bg-red-50"
-            }`}
-          >
-            <p
-              className={
-                dark
-                  ? "text-red-300"
-                  : "text-red-600"
-              }
-            >
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-10 text-center">
+            <AlertCircle
+              size={35}
+              className="mx-auto text-red-400"
+            />
+
+            <p className="mt-3 text-red-600">
               {error}
             </p>
 
             <button
-              onClick={loadAuctions}
-              className="mt-5 rounded-lg bg-orange-500 px-5 py-2 font-bold text-white hover:bg-orange-600"
+              onClick={onRefresh}
+              className="mt-5 rounded-lg bg-orange-500 px-5 py-2 font-bold text-white"
             >
               Try Again
             </button>
@@ -2583,35 +2177,17 @@ function AuctionHome() {
           !error &&
           filteredAuctions.length ===
             0 && (
-            <div
-              className={`rounded-2xl border p-12 text-center ${
-                dark
-                  ? "border-slate-800 bg-slate-900"
-                  : "border-gray-200 bg-white"
-              }`}
-            >
+            <div className="rounded-2xl border border-gray-200 p-12 text-center">
               <Search
                 size={36}
                 className="mx-auto text-gray-300"
               />
 
-              <h4
-                className={`mt-4 text-xl font-bold ${
-                  dark
-                    ? "text-white"
-                    : "text-gray-900"
-                }`}
-              >
+              <h4 className="mt-4 text-xl font-bold">
                 No auctions found
               </h4>
 
-              <p
-                className={`mt-2 ${
-                  dark
-                    ? "text-slate-500"
-                    : "text-gray-500"
-                }`}
-              >
+              <p className="mt-2 text-gray-500">
                 Try another search or
                 category.
               </p>
@@ -2621,7 +2197,7 @@ function AuctionHome() {
                   setSearch("");
                   setCategory("All");
                 }}
-                className="mt-5 rounded-lg bg-orange-500 px-5 py-2 font-bold text-white hover:bg-orange-600"
+                className="mt-5 rounded-lg bg-orange-500 px-5 py-2 font-bold text-white"
               >
                 Clear Filters
               </button>
@@ -2642,10 +2218,10 @@ function AuctionHome() {
                       auction.id
                     )}
                     onOpen={
-                      setSelectedAuction
+                      onOpenAuction
                     }
                     onFavorite={
-                      toggleFavorite
+                      onFavorite
                     }
                     dark={dark}
                   />
@@ -2659,20 +2235,14 @@ function AuctionHome() {
 
       <section
         id="categories"
-        className={
+        className={`border-y ${
           dark
-            ? "border-y border-slate-800 bg-slate-900/50"
-            : "border-y border-gray-200 bg-gray-50"
-        }
+            ? "border-slate-800 bg-slate-900/50"
+            : "border-gray-200 bg-gray-50"
+        }`}
       >
         <div className="mx-auto max-w-7xl px-6 py-16">
-          <h3
-            className={`text-3xl font-bold ${
-              dark
-                ? "text-white"
-                : "text-gray-900"
-            }`}
-          >
+          <h3 className="text-3xl font-bold">
             Categories
           </h3>
 
@@ -2687,12 +2257,12 @@ function AuctionHome() {
                       "auctions"
                     );
                   }}
-                  className={`rounded-xl border px-4 py-4 font-medium transition ${
+                  className={`rounded-xl border px-4 py-4 font-medium ${
                     category === item
                       ? "border-orange-500 bg-orange-500/10 text-orange-500"
                       : dark
-                      ? "border-slate-700 bg-slate-900 text-slate-300 hover:border-orange-400 hover:text-orange-400"
-                      : "border-gray-200 bg-white text-gray-700 hover:border-orange-300 hover:text-orange-500"
+                      ? "border-slate-700 bg-slate-900 text-slate-300"
+                      : "border-gray-200 bg-white text-gray-700"
                   }`}
                 >
                   {item}
@@ -2709,13 +2279,7 @@ function AuctionHome() {
         id="how"
         className="mx-auto max-w-7xl px-6 py-20"
       >
-        <h3
-          className={`text-center text-3xl font-bold ${
-            dark
-              ? "text-white"
-              : "text-gray-900"
-          }`}
-        >
+        <h3 className="text-center text-3xl font-bold">
           How Auction BD Works
         </h3>
 
@@ -2754,23 +2318,11 @@ function AuctionHome() {
                   <Icon size={23} />
                 </div>
 
-                <h4
-                  className={`mt-5 text-xl font-bold ${
-                    dark
-                      ? "text-white"
-                      : "text-gray-900"
-                  }`}
-                >
+                <h4 className="mt-5 text-xl font-bold">
                   {title}
                 </h4>
 
-                <p
-                  className={`mt-2 leading-6 ${
-                    dark
-                      ? "text-slate-400"
-                      : "text-gray-500"
-                  }`}
-                >
+                <p className="mt-2 leading-6 text-gray-500">
                   {description}
                 </p>
               </div>
@@ -2781,80 +2333,555 @@ function AuctionHome() {
 
       {/* SELL */}
 
-      <section
-        id="sell"
-        className="mx-auto max-w-7xl scroll-mt-24 px-6 pb-20"
-      >
+      <section className="mx-auto max-w-7xl px-6 pb-20">
         <div className="rounded-3xl bg-orange-500 p-8 text-white sm:p-10">
           <h3 className="text-3xl font-black">
-            Turn your item into an
-            auction.
+            Turn your item into an auction.
           </h3>
 
           <p className="mt-3 max-w-xl text-white/80">
-            Upload photos from your
-            phone, submit your item and
-            let buyers compete for it.
+            Upload photos directly from
+            your phone, submit your item
+            and let buyers compete for it.
           </p>
 
           <button
-            onClick={openSeller}
-            className="mt-6 rounded-xl bg-white px-6 py-3 font-bold text-orange-600 transition hover:bg-orange-50"
+            onClick={onSeller}
+            className="mt-6 rounded-xl bg-white px-6 py-3 font-bold text-orange-600 hover:bg-orange-50"
           >
             Sell Item
           </button>
         </div>
       </section>
+    </>
+  );
+}
 
-      {/* FOOTER */}
+/* =========================================================
+   FOOTER
+========================================================= */
 
-      <footer
-        className={`border-t px-6 py-8 ${
-          dark
-            ? "border-slate-800"
-            : "border-gray-200"
-        }`}
-      >
-        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-5 sm:flex-row">
-          <b
-            className={
-              dark
-                ? "text-white"
-                : "text-gray-900"
-            }
-          >
+function Footer({ dark }) {
+  return (
+    <footer
+      className={`border-t px-6 py-8 ${
+        dark
+          ? "border-slate-800"
+          : "border-gray-200"
+      }`}
+    >
+      <div className="mx-auto flex max-w-7xl flex-col justify-between gap-5 sm:flex-row">
+        <div>
+          <b>
             AUCTION
             <span className="text-orange-500">
               BD
             </span>
           </b>
 
-          <div
-            className={`flex gap-5 text-xs ${
-              dark
-                ? "text-slate-500"
-                : "text-gray-500"
-            }`}
-          >
-            <span className="flex items-center gap-1">
-              <ShieldCheck size={14} />
-              Verified
-            </span>
-
-            <span className="flex items-center gap-1">
-              <Truck size={14} />
-              Delivery
-            </span>
-
-            <span className="flex items-center gap-1">
-              <Zap size={14} />
-              Live
-            </span>
-          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            BID. WIN. OWN.
+          </p>
         </div>
-      </footer>
 
-      {/* AUTH */}
+        <div className="flex flex-wrap gap-5 text-xs text-gray-500">
+          <span className="flex items-center gap-1">
+            <ShieldCheck size={14} />
+            Verified
+          </span>
+
+          <span className="flex items-center gap-1">
+            <Truck size={14} />
+            Delivery
+          </span>
+
+          <span className="flex items-center gap-1">
+            <Zap size={14} />
+            Live
+          </span>
+
+          <span className="flex items-center gap-1">
+            <Gavel size={14} />
+            Auctions
+          </span>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+/* =========================================================
+   MAIN APP
+========================================================= */
+
+function App() {
+  const [auctions, setAuctions] =
+    useState([]);
+
+  const [
+    selectedAuction,
+    setSelectedAuction,
+  ] = useState(null);
+
+  const [page, setPage] =
+    useState("home");
+
+  const [authMode, setAuthMode] =
+    useState(null);
+
+  const [user, setUser] =
+    useState(getUser);
+
+  const [search, setSearch] =
+    useState("");
+
+  const [category, setCategory] =
+    useState("All");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  const [favorites, setFavorites] =
+    useState(() =>
+      readStorage(
+        KEYS.favorites,
+        []
+      )
+    );
+
+  const [toast, setToast] =
+    useState(null);
+
+  const [dark, setDark] =
+    useState(() => {
+      try {
+        const saved =
+          localStorage.getItem(
+            KEYS.theme
+          );
+
+        if (saved === "dark") {
+          return true;
+        }
+
+        if (saved === "light") {
+          return false;
+        }
+
+        return (
+          window.matchMedia?.(
+            "(prefers-color-scheme: dark)"
+          ).matches || false
+        );
+      } catch {
+        return false;
+      }
+    });
+
+  /* =======================================================
+     TOAST
+  ======================================================= */
+
+  const notify = useCallback(
+    (message, type = "success") => {
+      setToast({
+        message,
+        type,
+        id: Date.now(),
+      });
+    },
+    []
+  );
+
+  /* =======================================================
+     THEME
+  ======================================================= */
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        KEYS.theme,
+        dark ? "dark" : "light"
+      );
+    } catch {}
+
+    document.documentElement.style.colorScheme =
+      dark ? "dark" : "light";
+
+    document.body.style.backgroundColor =
+      dark ? "#020617" : "#ffffff";
+
+    document.body.style.color =
+      dark ? "#f8fafc" : "#111827";
+  }, [dark]);
+
+  /* =======================================================
+     FAVORITES
+  ======================================================= */
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        KEYS.favorites,
+        JSON.stringify(favorites)
+      );
+    } catch {}
+  }, [favorites]);
+
+  const toggleFavorite = useCallback(
+    (id) => {
+      setFavorites((current) => {
+        const exists =
+          current.includes(id);
+
+        notify(
+          exists
+            ? "Removed from favorites."
+            : "Added to favorites.",
+          "success"
+        );
+
+        return exists
+          ? current.filter(
+              (item) => item !== id
+            )
+          : [...current, id];
+      });
+    },
+    [notify]
+  );
+
+  /* =======================================================
+     LOAD AUCTIONS
+  ======================================================= */
+
+  const loadAuctions =
+    useCallback(async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const data = await api(
+          "/api/auctions?status=all"
+        );
+
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(
+              data?.auctions
+            )
+          ? data.auctions
+          : [];
+
+        setAuctions(
+          list.map(normalizeAuction)
+        );
+      } catch (error) {
+        console.error(
+          "Auction loading:",
+          error
+        );
+
+        setError(
+          error?.message ||
+            "Unable to load auctions."
+        );
+      } finally {
+        setLoading(false);
+      }
+    }, []);
+
+  useEffect(() => {
+    loadAuctions();
+  }, [loadAuctions]);
+
+  /* =======================================================
+     AUTH
+  ======================================================= */
+
+  const handleAuthSuccess = useCallback(
+    (newUser) => {
+      setUser(
+        newUser || getUser()
+      );
+
+      setAuthMode(null);
+
+      notify(
+        "You're signed in successfully.",
+        "success"
+      );
+    },
+    [notify]
+  );
+
+  const logout = useCallback(() => {
+    clearAuth();
+
+    setUser(null);
+    setPage("home");
+    setSelectedAuction(null);
+
+    notify(
+      "You have been signed out.",
+      "success"
+    );
+  }, [notify]);
+
+  /* =======================================================
+     NAVIGATION
+  ======================================================= */
+
+  const openSeller = () => {
+    if (!getToken()) {
+      setAuthMode("login");
+      return;
+    }
+
+    setSelectedAuction(null);
+    setPage("seller");
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
+  const scrollTo = (id) => {
+    document
+      .getElementById(id)
+      ?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+  };
+
+  /* =======================================================
+     ADMIN
+  ======================================================= */
+
+  const adminMode =
+    new URLSearchParams(
+      window.location.search
+    ).get("admin") === "1";
+
+  if (adminMode) {
+    return (
+      <>
+        <GlobalStyles dark={dark} />
+
+        <AdminPanel />
+      </>
+    );
+  }
+
+  /* =======================================================
+     DETAILS
+  ======================================================= */
+
+  if (selectedAuction) {
+    return (
+      <div
+        className={`min-h-screen ${
+          dark
+            ? "bg-slate-950 text-white"
+            : "bg-white text-gray-900"
+        }`}
+      >
+        <GlobalStyles dark={dark} />
+
+        <AuctionDetails
+          auction={selectedAuction}
+          onBack={() => {
+            setSelectedAuction(null);
+            loadAuctions();
+          }}
+          onLogin={() =>
+            setAuthMode("login")
+          }
+          dark={dark}
+        />
+
+        <div className="fixed right-4 top-4 z-[100]">
+          <ThemeButton
+            dark={dark}
+            onClick={() =>
+              setDark(
+                (value) => !value
+              )
+            }
+          />
+        </div>
+
+        {authMode && (
+          <AuthModal
+            mode={authMode}
+            onClose={() =>
+              setAuthMode(null)
+            }
+            onSuccess={
+              handleAuthSuccess
+            }
+            dark={dark}
+          />
+        )}
+
+        <Toast
+          toast={toast}
+          onClose={() =>
+            setToast(null)
+          }
+        />
+      </div>
+    );
+  }
+
+  /* =======================================================
+     SELLER
+  ======================================================= */
+
+  if (page === "seller") {
+    return (
+      <div
+        className={`min-h-screen ${
+          dark
+            ? "bg-slate-950 text-white"
+            : "bg-white text-gray-900"
+        }`}
+      >
+        <GlobalStyles dark={dark} />
+
+        <header
+          className={`sticky top-0 z-40 border-b backdrop-blur ${
+            dark
+              ? "border-slate-800 bg-slate-950/95"
+              : "border-gray-200 bg-white/95"
+          }`}
+        >
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
+            <button
+              onClick={() =>
+                setPage("home")
+              }
+              className="text-xl font-black"
+            >
+              AUCTION
+              <span className="text-orange-500">
+                BD
+              </span>
+            </button>
+
+            <div className="flex items-center gap-2">
+              <ThemeButton
+                dark={dark}
+                onClick={() =>
+                  setDark(
+                    (value) =>
+                      !value
+                  )
+                }
+              />
+
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 text-sm text-gray-500"
+              >
+                <LogOut size={17} />
+
+                <span className="hidden sm:inline">
+                  Logout
+                </span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <SellerPage
+          user={user}
+          onBack={() =>
+            setPage("home")
+          }
+          onLogin={() =>
+            setAuthMode("login")
+          }
+          dark={dark}
+          notify={notify}
+        />
+
+        <Toast
+          toast={toast}
+          onClose={() =>
+            setToast(null)
+          }
+        />
+
+        {authMode && (
+          <AuthModal
+            mode={authMode}
+            onClose={() =>
+              setAuthMode(null)
+            }
+            onSuccess={
+              handleAuthSuccess
+            }
+            dark={dark}
+          />
+        )}
+      </div>
+    );
+  }
+
+  /* =======================================================
+     HOME
+  ======================================================= */
+
+  return (
+    <div
+      className={`min-h-screen ${
+        dark
+          ? "bg-slate-950 text-white"
+          : "bg-white text-gray-900"
+      }`}
+    >
+      <GlobalStyles dark={dark} />
+
+      <Navbar
+        user={user}
+        dark={dark}
+        setDark={setDark}
+        onLogin={() =>
+          setAuthMode("login")
+        }
+        onRegister={() =>
+          setAuthMode("register")
+        }
+        onLogout={logout}
+        onSeller={openSeller}
+        scrollTo={scrollTo}
+      />
+
+      <HomePage
+        auctions={auctions}
+        loading={loading}
+        error={error}
+        search={search}
+        setSearch={setSearch}
+        category={category}
+        setCategory={setCategory}
+        favorites={favorites}
+        onFavorite={toggleFavorite}
+        onOpenAuction={
+          setSelectedAuction
+        }
+        onRefresh={loadAuctions}
+        onSeller={openSeller}
+        dark={dark}
+      />
+
+      <Footer dark={dark} />
 
       {authMode && (
         <AuthModal
@@ -2868,25 +2895,15 @@ function AuctionHome() {
           dark={dark}
         />
       )}
+
+      <Toast
+        toast={toast}
+        onClose={() =>
+          setToast(null)
+        }
+      />
     </div>
   );
-}
-
-/* =========================================================
-APP
-========================================================= */
-
-function App() {
-  const isAdmin =
-    new URLSearchParams(
-      window.location.search
-    ).get("admin") === "1";
-
-  if (isAdmin) {
-    return <AdminPanel />;
-  }
-
-  return <AuctionHome />;
 }
 
 export default App;

@@ -1,10 +1,10 @@
 import dns from "dns";
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -12,8 +12,6 @@ import auctionRoutes from "./routes/auctionRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import sellerRoutes from "./routes/sellerRoutes.js";
-
-dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -41,13 +39,13 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: (origin, callback) => {
+    origin(origin, callback) {
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
       console.warn("CORS blocked:", origin);
-      return callback(null, false);
+      return callback(new Error("Not allowed by CORS"));
     },
 
     credentials: true,
@@ -125,9 +123,7 @@ app.use((req, res, next) => {
 
 app.use(
   "/uploads",
-  express.static(
-    path.join(__dirname, "uploads")
-  )
+  express.static(path.join(__dirname, "uploads"))
 );
 
 /* =========================================================
@@ -149,8 +145,6 @@ app.get("/", (req, res) => {
 ========================================================= */
 
 app.get("/api", (req, res) => {
-  console.log("API ROOT HIT: /api");
-
   res.status(200).json({
     success: true,
     name: "AuctionBD API",
@@ -188,7 +182,6 @@ app.get("/api/health", (req, res) => {
         : "disconnected",
 
     uptime: Math.floor(process.uptime()),
-
     timestamp: new Date().toISOString(),
   });
 });
@@ -203,10 +196,7 @@ app.use("/api/auctions", auctionRoutes);
 
 app.use("/api/admin", adminRoutes);
 
-app.use(
-  "/api/seller-requests",
-  sellerRoutes
-);
+app.use("/api/seller-requests", sellerRoutes);
 
 /* Backward compatibility */
 app.use("/api/sellers", sellerRoutes);
@@ -216,9 +206,7 @@ app.use("/api/sellers", sellerRoutes);
 ========================================================= */
 
 app.use((req, res) => {
-  console.warn(
-    `404: ${req.method} ${req.originalUrl}`
-  );
+  console.warn(`404: ${req.method} ${req.originalUrl}`);
 
   res.status(404).json({
     success: false,
@@ -233,10 +221,7 @@ app.use((req, res) => {
 ========================================================= */
 
 app.use((error, req, res, next) => {
-  console.error(
-    "Unhandled server error:",
-    error
-  );
+  console.error("Unhandled server error:", error);
 
   if (res.headersSent) {
     return next(error);
@@ -247,8 +232,7 @@ app.use((error, req, res, next) => {
     message:
       process.env.NODE_ENV === "production"
         ? "Internal server error."
-        : error.message ||
-          "Internal server error.",
+        : error.message || "Internal server error.",
   });
 });
 
@@ -257,11 +241,11 @@ app.use((error, req, res, next) => {
 ========================================================= */
 
 async function connectDatabase() {
-  const mongoUri = process.env.MONGO_URI;
+  const mongoUri = process.env.MONGODB_URI;
 
   if (!mongoUri) {
     throw new Error(
-      "MONGO_URI is missing from environment variables."
+      "MONGODB_URI is missing from environment variables."
     );
   }
 
@@ -275,9 +259,7 @@ async function connectDatabase() {
     family: 4,
   });
 
-  console.log(
-    "MongoDB connected successfully ✅"
-  );
+  console.log("MongoDB connected successfully ✅");
 }
 
 /* =========================================================
@@ -288,46 +270,20 @@ async function startServer() {
   try {
     await connectDatabase();
 
-    app.listen(
-      PORT,
-      "0.0.0.0",
-      () => {
-        console.log(
-          "========================================"
-        );
-
-        console.log(
-          "🔥 AUCTIONBD SERVER STARTED 🔥"
-        );
-
-        console.log(
-          `Port: ${PORT}`
-        );
-
-        console.log(
-          `Local: http://localhost:${PORT}`
-        );
-
-        console.log(
-          `Health: http://localhost:${PORT}/api/health`
-        );
-
-        console.log(
-          `API: http://localhost:${PORT}/api`
-        );
-
-        console.log(
-          "========================================"
-        );
-      }
-    );
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log("========================================");
+      console.log("🔥 AUCTIONBD SERVER STARTED 🔥");
+      console.log(`Port: ${PORT}`);
+      console.log(`Local: http://localhost:${PORT}`);
+      console.log(
+        `Health: http://localhost:${PORT}/api/health`
+      );
+      console.log(`API: http://localhost:${PORT}/api`);
+      console.log("========================================");
+    });
   } catch (error) {
-    console.error(
-      "SERVER STARTUP FAILED ❌"
-    );
-
+    console.error("SERVER STARTUP FAILED ❌");
     console.error(error);
-
     process.exit(1);
   }
 }
@@ -337,35 +293,20 @@ async function startServer() {
 ========================================================= */
 
 async function shutdown(signal) {
-  console.log(
-    `${signal}: shutting down...`
-  );
+  console.log(`${signal}: shutting down...`);
 
   try {
     await mongoose.connection.close();
-
-    console.log(
-      "MongoDB connection closed."
-    );
+    console.log("MongoDB connection closed.");
   } catch (error) {
-    console.error(
-      "MongoDB shutdown error:",
-      error
-    );
+    console.error("MongoDB shutdown error:", error);
   } finally {
     process.exit(0);
   }
 }
 
-process.on(
-  "SIGINT",
-  () => shutdown("SIGINT")
-);
-
-process.on(
-  "SIGTERM",
-  () => shutdown("SIGTERM")
-);
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 /* =========================================================
    START
