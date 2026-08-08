@@ -1286,19 +1286,30 @@ function AuctionHome() {
   ========================= */
 
   if (selectedAuction) {
-    return (
+  return (
+    <>
       <AuctionDetails
         auction={selectedAuction}
         onBack={() => {
           setSelectedAuction(null);
           loadAuctions();
         }}
-        onLogin={() => {
-          setAuthMode("login");
-        }}
+        onLogin={() => setAuthMode("login")}
       />
-    );
-  }
+
+      {authMode && (
+        <AuthModal
+          mode={authMode}
+          onClose={() => setAuthMode(null)}
+          onSuccess={(newUser) => {
+            setUser(newUser || getSavedUser());
+            setAuthMode(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
 
   /* =========================
      SELLER PAGE
