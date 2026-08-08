@@ -13,9 +13,9 @@ import {
 
 const router = express.Router();
 
-// =========================
+// =====================================================
 // UPLOADS
-// =========================
+// =====================================================
 
 const uploadDir = path.join(
   process.cwd(),
@@ -63,13 +63,18 @@ const upload = multer({
       return cb(null, true);
     }
 
-    cb(new Error("Only JPG, PNG, WEBP and HEIC images are allowed."));
+    cb(
+      new Error(
+        "Only JPG, PNG, WEBP and HEIC images are allowed."
+      )
+    );
   },
 });
 
-// =========================
+// =====================================================
 // CREATE SELLER REQUEST
-// =========================
+// POST /api/seller-requests
+// =====================================================
 
 router.post(
   "/",
@@ -158,45 +163,97 @@ router.post(
       });
 
       res.status(201).json({
-        message: "Your auction request has been submitted.",
+        message:
+          "Your auction request has been submitted.",
         request,
       });
     } catch (error) {
-      console.error("Seller request error:", error);
+      console.error(
+        "Seller request error:",
+        error
+      );
 
       res.status(400).json({
         message:
-          error.message || "Unable to submit request.",
+          error.message ||
+          "Unable to submit request.",
       });
     }
   }
 );
 
-// =========================
-// MY REQUESTS
-// =========================
+// =====================================================
+// ALL SELLER REQUESTS
+// GET /api/seller-requests
+//
+// This route is required by the current AdminPanel.
+// =====================================================
 
-router.get("/mine", requireAuth, async (req, res) => {
-  try {
-    const requests = await SellerRequest.find({
-      userId: req.user._id,
-    })
-      .sort({ createdAt: -1 })
-      .lean();
+router.get(
+  "/",
+  requireAuth,
+  requireAdmin,
+  async (_req, res) => {
+    try {
+      const requests = await SellerRequest.find()
+        .sort({ createdAt: -1 })
+        .populate(
+          "userId",
+          "name email phone verified"
+        )
+        .lean();
 
-    res.json(requests);
-  } catch (error) {
-    console.error("My requests error:", error);
+      res.json(requests);
+    } catch (error) {
+      console.error(
+        "All seller requests error:",
+        error
+      );
 
-    res.status(500).json({
-      message: "Unable to load your requests.",
-    });
+      res.status(500).json({
+        message:
+          "Unable to load seller requests.",
+      });
+    }
   }
-});
+);
 
-// =========================
+// =====================================================
+// MY REQUESTS
+// GET /api/seller-requests/mine
+// =====================================================
+
+router.get(
+  "/mine",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const requests =
+        await SellerRequest.find({
+          userId: req.user._id,
+        })
+          .sort({ createdAt: -1 })
+          .lean();
+
+      res.json(requests);
+    } catch (error) {
+      console.error(
+        "My requests error:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to load your requests.",
+      });
+    }
+  }
+);
+
+// =====================================================
 // ADMIN - ALL REQUESTS
-// =========================
+// GET /api/seller-requests/admin
+// =====================================================
 
 router.get(
   "/admin",
@@ -206,23 +263,31 @@ router.get(
     try {
       const requests = await SellerRequest.find()
         .sort({ createdAt: -1 })
-        .populate("userId", "name email phone verified")
+        .populate(
+          "userId",
+          "name email phone verified"
+        )
         .lean();
 
       res.json(requests);
     } catch (error) {
-      console.error("Admin requests error:", error);
+      console.error(
+        "Admin requests error:",
+        error
+      );
 
       res.status(500).json({
-        message: "Unable to load seller requests.",
+        message:
+          "Unable to load seller requests.",
       });
     }
   }
 );
 
-// =========================
+// =====================================================
 // ADMIN - REJECT
-// =========================
+// PATCH /api/seller-requests/admin/:id/reject
+// =====================================================
 
 router.patch(
   "/admin/:id/reject",
@@ -230,9 +295,10 @@ router.patch(
   requireAdmin,
   async (req, res) => {
     try {
-      const request = await SellerRequest.findById(
-        req.params.id
-      );
+      const request =
+        await SellerRequest.findById(
+          req.params.id
+        );
 
       if (!request) {
         return res.status(404).json({
@@ -241,10 +307,11 @@ router.patch(
       }
 
       request.status = "rejected";
-      request.rejectionReason =
-        String(
-          req.body.reason || "Request rejected."
-        ).trim();
+
+      request.rejectionReason = String(
+        req.body.reason ||
+          "Request rejected."
+      ).trim();
 
       request.reviewedAt = new Date();
       request.reviewedBy = req.user.email;
@@ -256,18 +323,23 @@ router.patch(
         request,
       });
     } catch (error) {
-      console.error("Reject request error:", error);
+      console.error(
+        "Reject request error:",
+        error
+      );
 
       res.status(500).json({
-        message: "Unable to reject request.",
+        message:
+          "Unable to reject request.",
       });
     }
   }
 );
 
-// =========================
+// =====================================================
 // ADMIN - NEED MORE INFO
-// =========================
+// PATCH /api/seller-requests/admin/:id/more-info
+// =====================================================
 
 router.patch(
   "/admin/:id/more-info",
@@ -275,9 +347,10 @@ router.patch(
   requireAdmin,
   async (req, res) => {
     try {
-      const request = await SellerRequest.findById(
-        req.params.id
-      );
+      const request =
+        await SellerRequest.findById(
+          req.params.id
+        );
 
       if (!request) {
         return res.status(404).json({
@@ -286,6 +359,7 @@ router.patch(
       }
 
       request.status = "more_info";
+
       request.adminNotes = String(
         req.body.notes || ""
       ).trim();
@@ -296,22 +370,28 @@ router.patch(
       await request.save();
 
       res.json({
-        message: "Information request saved.",
+        message:
+          "Information request saved.",
         request,
       });
     } catch (error) {
-      console.error("More info error:", error);
+      console.error(
+        "More info error:",
+        error
+      );
 
       res.status(500).json({
-        message: "Unable to update request.",
+        message:
+          "Unable to update request.",
       });
     }
   }
 );
 
-// =========================
+// =====================================================
 // ADMIN - APPROVE
-// =========================
+// PATCH /api/seller-requests/admin/:id/approve
+// =====================================================
 
 router.patch(
   "/admin/:id/approve",
@@ -319,9 +399,10 @@ router.patch(
   requireAdmin,
   async (req, res) => {
     try {
-      const request = await SellerRequest.findById(
-        req.params.id
-      );
+      const request =
+        await SellerRequest.findById(
+          req.params.id
+        );
 
       if (!request) {
         return res.status(404).json({
