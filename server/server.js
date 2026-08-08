@@ -41,20 +41,12 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin(origin, callback) {
-      // Requests without an Origin header:
-      // Postman, server-to-server, Render health checks, etc.
-      if (!origin) {
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      console.warn(`CORS blocked: ${origin}`);
-
-      // Do not crash the server because of a bad origin.
+      console.warn("CORS blocked:", origin);
       return callback(null, false);
     },
 
@@ -79,19 +71,6 @@ app.use(
   })
 );
 
-/*
-IMPORTANT:
-Do NOT use:
-
-app.options("*", cors());
-
-Express 5 / path-to-regexp rejects "*"
-and crashes the server.
-
-The cors middleware above already handles
-OPTIONS/preflight requests.
-*/
-
 /* =========================================================
    BODY PARSING
 ========================================================= */
@@ -114,16 +93,8 @@ app.use(
 ========================================================= */
 
 app.use((req, res, next) => {
-  res.setHeader(
-    "X-Content-Type-Options",
-    "nosniff"
-  );
-
-  res.setHeader(
-    "X-Frame-Options",
-    "DENY"
-  );
-
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
   res.setHeader(
     "Referrer-Policy",
     "strict-origin-when-cross-origin"
@@ -140,10 +111,8 @@ app.use((req, res, next) => {
   const started = Date.now();
 
   res.on("finish", () => {
-    const duration = Date.now() - started;
-
     console.log(
-      `${req.method} ${req.originalUrl} -> ${res.statusCode} (${duration}ms)`
+      `${req.method} ${req.originalUrl} -> ${res.statusCode} (${Date.now() - started}ms)`
     );
   });
 
@@ -162,25 +131,16 @@ app.use(
 );
 
 /* =========================================================
-   HEALTH CHECK
+   ROOT
 ========================================================= */
 
-app.get("/api/health", (req, res) => {
+app.get("/", (req, res) => {
   res.status(200).json({
-    status: "ok",
-    server: "AuctionBD API",
-
-    database:
-      mongoose.connection.readyState === 1
-        ? "connected"
-        : "disconnected",
-
-    uptime: Math.floor(
-      process.uptime()
-    ),
-
-    timestamp:
-      new Date().toISOString(),
+    success: true,
+    name: "AuctionBD API",
+    status: "running",
+    health: "/api/health",
+    api: "/api",
   });
 });
 
@@ -189,7 +149,10 @@ app.get("/api/health", (req, res) => {
 ========================================================= */
 
 app.get("/api", (req, res) => {
+  console.log("API ROOT HIT: /api");
+
   res.status(200).json({
+    success: true,
     name: "AuctionBD API",
     version: "1.0.0",
     status: "running",
@@ -200,6 +163,7 @@ app.get("/api", (req, res) => {
         : "disconnected",
 
     routes: {
+      health: "/api/health",
       auth: "/api/auth",
       auctions: "/api/auctions",
       admin: "/api/admin",
@@ -209,15 +173,23 @@ app.get("/api", (req, res) => {
 });
 
 /* =========================================================
-   SERVER ROOT
+   HEALTH CHECK
 ========================================================= */
 
-app.get("/", (req, res) => {
+app.get("/api/health", (req, res) => {
   res.status(200).json({
-    name: "AuctionBD API",
-    status: "running",
-    health: "/api/health",
-    api: "/api",
+    success: true,
+    status: "ok",
+    server: "AuctionBD API",
+
+    database:
+      mongoose.connection.readyState === 1
+        ? "connected"
+        : "disconnected",
+
+    uptime: Math.floor(process.uptime()),
+
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -225,56 +197,19 @@ app.get("/", (req, res) => {
    API ROUTES
 ========================================================= */
 
-/*
-AUTH
-*/
+app.use("/api/auth", authRoutes);
 
-app.use(
-  "/api/auth",
-  authRoutes
-);
+app.use("/api/auctions", auctionRoutes);
 
-/*
-AUCTIONS
-
-GET  /api/auctions
-GET  /api/auctions/:id
-POST /api/auctions
-POST /api/auctions/:id/bids
-GET  /api/auctions/:id/bids
-*/
-
-app.use(
-  "/api/auctions",
-  auctionRoutes
-);
-
-/*
-ADMIN
-*/
-
-app.use(
-  "/api/admin",
-  adminRoutes
-);
-
-/*
-SELLER REQUESTS
-*/
+app.use("/api/admin", adminRoutes);
 
 app.use(
   "/api/seller-requests",
   sellerRoutes
 );
 
-/*
-BACKWARD COMPATIBILITY
-*/
-
-app.use(
-  "/api/sellers",
-  sellerRoutes
-);
+/* Backward compatibility */
+app.use("/api/sellers", sellerRoutes);
 
 /* =========================================================
    404
@@ -282,7 +217,7 @@ app.use(
 
 app.use((req, res) => {
   console.warn(
-    `404 API endpoint: ${req.method} ${req.originalUrl}`
+    `404: ${req.method} ${req.originalUrl}`
   );
 
   res.status(404).json({
@@ -294,41 +229,35 @@ app.use((req, res) => {
 });
 
 /* =========================================================
-   GLOBAL ERROR HANDLER
+   ERROR HANDLER
 ========================================================= */
 
-app.use(
-  (error, req, res, next) => {
-    console.error(
-      "Unhandled server error:",
-      error
-    );
+app.use((error, req, res, next) => {
+  console.error(
+    "Unhandled server error:",
+    error
+  );
 
-    if (res.headersSent) {
-      return next(error);
-    }
-
-    res.status(
-      error.status || 500
-    ).json({
-      success: false,
-
-      message:
-        process.env.NODE_ENV === "production"
-          ? "Internal server error."
-          : error.message ||
-            "Internal server error.",
-    });
+  if (res.headersSent) {
+    return next(error);
   }
-);
+
+  res.status(error.status || 500).json({
+    success: false,
+    message:
+      process.env.NODE_ENV === "production"
+        ? "Internal server error."
+        : error.message ||
+          "Internal server error.",
+  });
+});
 
 /* =========================================================
    DATABASE
 ========================================================= */
 
 async function connectDatabase() {
-  const mongoUri =
-    process.env.MONGO_URI;
+  const mongoUri = process.env.MONGO_URI;
 
   if (!mongoUri) {
     throw new Error(
@@ -336,23 +265,15 @@ async function connectDatabase() {
     );
   }
 
-  mongoose.set(
-    "strictQuery",
-    true
-  );
+  mongoose.set("strictQuery", true);
 
-  await mongoose.connect(
-    mongoUri,
-    {
-      serverSelectionTimeoutMS: 15000,
-      socketTimeoutMS: 45000,
-
-      maxPoolSize: 10,
-      minPoolSize: 2,
-
-      family: 4,
-    }
-  );
+  await mongoose.connect(mongoUri, {
+    serverSelectionTimeoutMS: 15000,
+    socketTimeoutMS: 45000,
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    family: 4,
+  });
 
   console.log(
     "MongoDB connected successfully ✅"
@@ -376,15 +297,23 @@ async function startServer() {
         );
 
         console.log(
-          `AuctionBD API running on port ${PORT} 🚀`
+          "🔥 AUCTIONBD SERVER STARTED 🔥"
         );
 
         console.log(
-          `Local API: http://localhost:${PORT}`
+          `Port: ${PORT}`
+        );
+
+        console.log(
+          `Local: http://localhost:${PORT}`
         );
 
         console.log(
           `Health: http://localhost:${PORT}/api/health`
+        );
+
+        console.log(
+          `API: http://localhost:${PORT}/api`
         );
 
         console.log(
@@ -394,7 +323,7 @@ async function startServer() {
     );
   } catch (error) {
     console.error(
-      "Server startup failed ❌"
+      "SERVER STARTUP FAILED ❌"
     );
 
     console.error(error);
@@ -420,7 +349,7 @@ async function shutdown(signal) {
     );
   } catch (error) {
     console.error(
-      "Error closing MongoDB:",
+      "MongoDB shutdown error:",
       error
     );
   } finally {
