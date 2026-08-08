@@ -7,14 +7,15 @@ import { requireAuth } from "../middleware/auth.js";
 
 const router = express.Router();
 
-const validId = (id) =>
-  mongoose.Types.ObjectId.isValid(id);
+const validId = (id) => mongoose.Types.ObjectId.isValid(id);
 
-const clean = (value = "") =>
-  String(value).trim();
+const clean = (value = "") => String(value).trim();
 
-const email = (value = "") =>
-  clean(value).toLowerCase();
+const email = (value = "") => clean(value).toLowerCase();
+
+/* =========================================================
+   HELPERS
+========================================================= */
 
 async function expireAuctions() {
   await Auction.updateMany(
@@ -33,9 +34,45 @@ async function expireAuctions() {
   );
 }
 
-/* =========================
-   GET PUBLIC AUCTIONS
-========================= */
+function normalizeAuction(auction) {
+  if (!auction) return null;
+
+  const item =
+    typeof auction.toObject === "function"
+      ? auction.toObject()
+      : { ...auction };
+
+  return {
+    ...item,
+
+    id: item._id?.toString?.() || item.id,
+
+    price: Number(item.price || item.startingPrice || 0),
+
+    startingPrice: Number(
+      item.startingPrice || item.price || 0
+    ),
+
+    bids: Number(item.bids || 0),
+
+    image: item.image || "",
+
+    images: Array.isArray(item.images)
+      ? item.images
+      : item.image
+      ? [item.image]
+      : [],
+
+    bidHistory: Array.isArray(item.bidHistory)
+      ? item.bidHistory
+      : [],
+  };
+}
+
+/* =========================================================
+   GET ALL PUBLIC AUCTIONS
+   GET /api/auctions
+========================================================= */
 
 router.get("/", async (req, res) => {
   try {
@@ -54,7 +91,7 @@ router.get("/", async (req, res) => {
       approved: true,
     };
 
-    if (status !== "all") {
+    if (status && status !== "all") {
       filter.status = status;
     }
 
@@ -99,12 +136,19 @@ router.get("/", async (req, res) => {
       ];
     }
 
+    /* ---------------------------------------------
+       Backward compatible response:
+       no pagination = plain array
+    --------------------------------------------- */
+
     if (!page && !limit) {
       const auctions = await Auction.find(filter)
         .sort({ createdAt: -1 })
         .lean();
 
-      return res.json(auctions);
+      return res.json(
+        auctions.map(normalizeAuction)
+      );
     }
 
     const currentPage = Math.max(
@@ -122,8 +166,7 @@ router.get("/", async (req, res) => {
         Auction.find(filter)
           .sort({ createdAt: -1 })
           .skip(
-            (currentPage - 1) *
-              pageSize
+            (currentPage - 1) * pageSize
           )
           .limit(pageSize)
           .lean(),
@@ -132,7 +175,10 @@ router.get("/", async (req, res) => {
       ]);
 
     res.json({
-      auctions,
+      auctions: auctions.map(
+        normalizeAuction
+      ),
+
       pagination: {
         page: currentPage,
         limit: pageSize,
@@ -155,9 +201,14 @@ router.get("/", async (req, res) => {
   }
 });
 
-/* =========================
+/* =========================================================
    GET SINGLE AUCTION
-========================= */
+   GET /api/auctions/:id
+
+   IMPORTANT:
+   This route MUST remain before no generic
+   catch-all routes.
+========================================================= */
 
 router.get("/:id", async (req, res) => {
   try {
@@ -169,7 +220,7 @@ router.get("/:id", async (req, res) => {
       });
     }
 
-    const auction =
+    let auction =
       await Auction.findOneAndUpdate(
         {
           _id: id,
@@ -177,7 +228,9 @@ router.get("/:id", async (req, res) => {
           approved: true,
         },
         {
-          $inc: { views: 1 },
+          $inc: {
+            views: 1,
+          },
         },
         {
           new: true,
@@ -190,6 +243,10 @@ router.get("/:id", async (req, res) => {
       });
     }
 
+    /* ---------------------------------------------
+       Automatically end expired auction
+    --------------------------------------------- */
+
     if (
       auction.status === "active" &&
       auction.endDate &&
@@ -199,7 +256,54 @@ router.get("/:id", async (req, res) => {
       await auction.save();
     }
 
-    res.json(auction);
+    /* ---------------------------------------------
+       Get latest bid history from Bid collection
+       as well as embedded history.
+    --------------------------------------------- */
+
+    const bids = await Bid.find({
+      auctionId: id,
+      status: {
+        $ne: "invalid",
+      },
+    })
+      .sort({
+        createdAt: -1,
+      })
+      .limit(100)
+      .lean();
+
+    const normalized = normalizeAuction(
+      auction
+    );
+
+    normalized.bidHistory =
+      bids.length
+        ? bids.map((bid) => ({
+            _id: bid._id,
+            bidder:
+              bid.bidder ||
+              "AuctionBD User",
+            bidderId:
+              bid.bidderId || "",
+            bidderEmail:
+              bid.bidderEmail || "",
+            amount: Number(
+              bid.amount || 0
+            ),
+            status:
+              bid.status || "valid",
+            createdAt:
+              bid.createdAt,
+          }))
+        : normalized.bidHistory || [];
+
+    normalized.bids = Math.max(
+      Number(normalized.bids || 0),
+      normalized.bidHistory.length
+    );
+
+    res.status(200).json(normalized);
   } catch (error) {
     console.error(
       "Get auction error:",
@@ -213,9 +317,10 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-/* =========================
+/* =========================================================
    CREATE AUCTION
-========================= */
+   POST /api/auctions
+========================================================= */
 
 router.post("/", async (req, res) => {
   try {
@@ -225,6 +330,7 @@ router.post("/", async (req, res) => {
       categoryGroup,
       description = "",
       image,
+      images = [],
       startingPrice,
       price,
       seller = "AuctionBD User",
@@ -238,10 +344,21 @@ router.post("/", async (req, res) => {
 
     const cleanTitle = clean(title);
     const cleanCategory = clean(category);
-    const cleanGroup = clean(categoryGroup);
+    const cleanGroup = clean(
+      categoryGroup
+    );
     const cleanDescription =
       clean(description);
-    const cleanImage = clean(image);
+
+    const imageList = [
+      clean(image),
+      ...(Array.isArray(images)
+        ? images.map(clean)
+        : []),
+    ].filter(Boolean);
+
+    const cleanImage =
+      imageList[0] || "";
 
     if (
       !cleanTitle ||
@@ -272,19 +389,29 @@ router.post("/", async (req, res) => {
     const auction =
       await Auction.create({
         title: cleanTitle,
+
         category: cleanCategory,
-        categoryGroup: cleanGroup,
-        description: cleanDescription,
+
+        categoryGroup:
+          cleanGroup,
+
+        description:
+          cleanDescription,
+
         image: cleanImage,
 
+        images: imageList,
+
         startingPrice: starting,
+
         price: starting,
 
         seller:
           clean(seller) ||
           "AuctionBD User",
 
-        sellerId: clean(sellerId),
+        sellerId:
+          clean(sellerId),
 
         sellerEmail:
           email(sellerEmail),
@@ -302,11 +429,19 @@ router.post("/", async (req, res) => {
           clean(time) || "Live",
 
         status: "active",
+
         approved: true,
+
         deleted: false,
+
+        bids: 0,
+
+        bidHistory: [],
       });
 
-    res.status(201).json(auction);
+    res.status(201).json(
+      normalizeAuction(auction)
+    );
   } catch (error) {
     console.error(
       "Create auction error:",
@@ -321,10 +456,10 @@ router.post("/", async (req, res) => {
   }
 });
 
-/* =========================
+/* =========================================================
    PLACE BID
-   LOGIN REQUIRED
-========================= */
+   POST /api/auctions/:id/bids
+========================================================= */
 
 router.post(
   "/:id/bids",
@@ -332,6 +467,7 @@ router.post(
   async (req, res) => {
     try {
       const { id } = req.params;
+
       const amount = Number(
         req.body.amount
       );
@@ -369,7 +505,9 @@ router.post(
 
       const now = new Date();
 
-      if (auction.status !== "active") {
+      if (
+        auction.status !== "active"
+      ) {
         return res.status(400).json({
           message:
             `This auction is ${auction.status}.`,
@@ -391,6 +529,7 @@ router.post(
         auction.endDate <= now
       ) {
         auction.status = "ended";
+
         await auction.save();
 
         return res.status(400).json({
@@ -399,46 +538,45 @@ router.post(
         });
       }
 
-      if (amount <= auction.price) {
+      if (
+        amount <= auction.price
+      ) {
         return res.status(400).json({
           message:
-            `Bid must be higher than ৳${auction.price.toLocaleString(
+            `Bid must be higher than ৳${Number(
+              auction.price || 0
+            ).toLocaleString(
               "en-BD"
             )}.`,
         });
       }
 
-      /*
-       * IMPORTANT:
-       * Bidder information comes from
-       * the authenticated JWT.
-       *
-       * We do NOT trust bidder information
-       * sent by the frontend.
-       */
-
-      const bidder =
-        clean(req.user.name);
+      const bidder = clean(
+        req.user?.name
+      );
 
       const bidderId =
-        req.user._id.toString();
+        req.user?._id?.toString?.() ||
+        "";
 
       const bidderEmail =
-        email(req.user.email);
+        email(req.user?.email);
 
-      /*
-       * Atomic update prevents two users
-       * from placing the same/lower bid
-       * at the same time.
-       */
+      /* ---------------------------------------------
+         Atomic auction update
+      --------------------------------------------- */
 
       const updated =
         await Auction.findOneAndUpdate(
           {
             _id: id,
+
             status: "active",
+
             approved: true,
+
             deleted: false,
+
             price: {
               $lt: amount,
             },
@@ -452,11 +590,16 @@ router.post(
               bidHistory: {
                 $each: [
                   {
-                    bidder,
+                    bidder:
+                      bidder ||
+                      "AuctionBD User",
+
                     amount,
+
                     createdAt: now,
                   },
                 ],
+
                 $position: 0,
               },
             },
@@ -477,13 +620,25 @@ router.post(
         });
       }
 
+      /* ---------------------------------------------
+         Save separate bid record
+      --------------------------------------------- */
+
       const savedBid =
         await Bid.create({
-          auctionId: auction._id,
-          bidder,
+          auctionId:
+            updated._id,
+
+          bidder:
+            bidder ||
+            "AuctionBD User",
+
           bidderId,
+
           bidderEmail,
+
           amount,
+
           status: "valid",
         });
 
@@ -491,20 +646,30 @@ router.post(
         message:
           "Bid placed successfully.",
 
-        auction: updated,
+        auction:
+          normalizeAuction(
+            updated
+          ),
 
         bid: {
-          _id: savedBid._id,
+          _id:
+            savedBid._id,
+
           bidder:
             savedBid.bidder,
+
           bidderId:
             savedBid.bidderId,
+
           bidderEmail:
             savedBid.bidderEmail,
+
           amount:
             savedBid.amount,
+
           status:
             savedBid.status,
+
           createdAt:
             savedBid.createdAt,
         },
@@ -523,9 +688,10 @@ router.post(
   }
 );
 
-/* =========================
+/* =========================================================
    GET BID HISTORY
-========================= */
+   GET /api/auctions/:id/bids
+========================================================= */
 
 router.get(
   "/:id/bids",
@@ -557,25 +723,36 @@ router.get(
         });
       }
 
-      const bids = await Bid.find({
-        auctionId: id,
-      })
-        .sort({
-          createdAt: -1,
+      const bids =
+        await Bid.find({
+          auctionId: id,
+          status: {
+            $ne: "invalid",
+          },
         })
-        .limit(100)
-        .lean();
+          .sort({
+            createdAt: -1,
+          })
+          .limit(100)
+          .lean();
 
-      res.json({
-        bids: bids.length
+      const history =
+        bids.length
           ? bids
-          : auction.bidHistory || [],
+          : auction.bidHistory || [];
 
-        total:
-          auction.bids || 0,
+      res.status(200).json({
+        bids: history,
 
-        currentPrice:
-          auction.price,
+        total: Number(
+          auction.bids ||
+            history.length ||
+            0
+        ),
+
+        currentPrice: Number(
+          auction.price || 0
+        ),
       });
     } catch (error) {
       console.error(

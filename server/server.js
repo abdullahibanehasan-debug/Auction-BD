@@ -42,7 +42,8 @@ const allowedOrigins = [
 app.use(
   cors({
     origin(origin, callback) {
-      // Allow server-to-server requests, Postman, Render health checks, etc.
+      // Requests without an Origin header:
+      // Postman, server-to-server, Render health checks, etc.
       if (!origin) {
         return callback(null, true);
       }
@@ -53,7 +54,7 @@ app.use(
 
       console.warn(`CORS blocked: ${origin}`);
 
-      // Don't crash the server because of a bad browser origin.
+      // Do not crash the server because of a bad origin.
       return callback(null, false);
     },
 
@@ -78,8 +79,18 @@ app.use(
   })
 );
 
-/* Make sure browser preflight requests are handled. */
+/*
+IMPORTANT:
+Do NOT use:
+
 app.options("*", cors());
+
+Express 5 / path-to-regexp rejects "*"
+and crashes the server.
+
+The cors middleware above already handles
+OPTIONS/preflight requests.
+*/
 
 /* =========================================================
    BODY PARSING
@@ -123,7 +134,6 @@ app.use((req, res, next) => {
 
 /* =========================================================
    REQUEST LOGGING
-   Helpful when debugging Render/API endpoint problems.
 ========================================================= */
 
 app.use((req, res, next) => {
@@ -156,17 +166,21 @@ app.use(
 ========================================================= */
 
 app.get("/api/health", (req, res) => {
-  const database =
-    mongoose.connection.readyState === 1
-      ? "connected"
-      : "disconnected";
-
   res.status(200).json({
     status: "ok",
     server: "AuctionBD API",
-    database,
-    uptime: Math.floor(process.uptime()),
-    timestamp: new Date().toISOString(),
+
+    database:
+      mongoose.connection.readyState === 1
+        ? "connected"
+        : "disconnected",
+
+    uptime: Math.floor(
+      process.uptime()
+    ),
+
+    timestamp:
+      new Date().toISOString(),
   });
 });
 
@@ -179,6 +193,7 @@ app.get("/api", (req, res) => {
     name: "AuctionBD API",
     version: "1.0.0",
     status: "running",
+
     database:
       mongoose.connection.readyState === 1
         ? "connected"
@@ -211,64 +226,58 @@ app.get("/", (req, res) => {
 ========================================================= */
 
 /*
-  Authentication
-
-  Example:
-  POST /api/auth/login
-  POST /api/auth/register
+AUTH
 */
+
 app.use(
   "/api/auth",
   authRoutes
 );
 
 /*
-  Auctions
+AUCTIONS
 
-  Examples:
-  GET  /api/auctions
-  GET  /api/auctions/:id
-  POST /api/auctions
-  POST /api/auctions/:id/bids
+GET  /api/auctions
+GET  /api/auctions/:id
+POST /api/auctions
+POST /api/auctions/:id/bids
+GET  /api/auctions/:id/bids
 */
+
 app.use(
   "/api/auctions",
   auctionRoutes
 );
 
 /*
-  Admin
+ADMIN
 */
+
 app.use(
   "/api/admin",
   adminRoutes
 );
 
 /*
-  Seller requests
-
-  Frontend:
-  /api/seller-requests
-  /api/seller-requests/mine
+SELLER REQUESTS
 */
+
 app.use(
   "/api/seller-requests",
   sellerRoutes
 );
 
 /*
-  Backward compatibility.
-
-  Older frontend code may still use:
-  /api/sellers
+BACKWARD COMPATIBILITY
 */
+
 app.use(
   "/api/sellers",
   sellerRoutes
 );
 
 /* =========================================================
-   404 API HANDLER
+   404
 ========================================================= */
 
 app.use((req, res) => {
@@ -288,33 +297,38 @@ app.use((req, res) => {
    GLOBAL ERROR HANDLER
 ========================================================= */
 
-app.use((error, req, res, next) => {
-  console.error(
-    "Unhandled server error:",
-    error
-  );
+app.use(
+  (error, req, res, next) => {
+    console.error(
+      "Unhandled server error:",
+      error
+    );
 
-  if (res.headersSent) {
-    return next(error);
+    if (res.headersSent) {
+      return next(error);
+    }
+
+    res.status(
+      error.status || 500
+    ).json({
+      success: false,
+
+      message:
+        process.env.NODE_ENV === "production"
+          ? "Internal server error."
+          : error.message ||
+            "Internal server error.",
+    });
   }
-
-  res.status(error.status || 500).json({
-    success: false,
-
-    message:
-      process.env.NODE_ENV === "production"
-        ? "Internal server error."
-        : error.message ||
-          "Internal server error.",
-  });
-});
+);
 
 /* =========================================================
    DATABASE
 ========================================================= */
 
 async function connectDatabase() {
-  const mongoUri = process.env.MONGO_URI;
+  const mongoUri =
+    process.env.MONGO_URI;
 
   if (!mongoUri) {
     throw new Error(
