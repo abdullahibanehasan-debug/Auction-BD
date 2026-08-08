@@ -36,13 +36,44 @@ const auctionSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+
+    description: {
+      type: String,
+      default: "",
+    },
+
+    seller: {
+      type: String,
+      default: "AuctionBD User",
+    },
+
+    bidHistory: [
+      {
+        bidder: {
+          type: String,
+          required: true,
+        },
+
+        amount: {
+          type: Number,
+          required: true,
+        },
+
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+
+    status: {
+      type: String,
+      default: "active",
+    },
   },
   {
     timestamps: true,
   }
 );
 
-export default mongoose.model(
-  "Auction",
-  auctionSchema
-);
+export default mongoose.model("Auction", auctionSchema);
