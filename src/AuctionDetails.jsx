@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -11,7 +12,9 @@ import {
   Loader2,
 } from "lucide-react";
 
-const API_URL = "http://localhost:5000";
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "https://auction-bd.onrender.com";
 
 function AuctionDetails({ auction, onBack }) {
   const [auctionData, setAuctionData] = useState(auction);
@@ -32,28 +35,45 @@ function AuctionDetails({ auction, onBack }) {
         setLoading(true);
         setError("");
 
+        const auctionId = auction?._id || auction?.id;
+
+        if (!auctionId) {
+          throw new Error("Auction ID is missing");
+        }
+
         const response = await fetch(
-          `${API_URL}/api/auctions/${auction.id}`
+          `${API_URL}/api/auctions/${auctionId}`
         );
 
         if (!response.ok) {
-          throw new Error("Failed to load auction");
+          const errorData = await response.json().catch(() => ({}));
+
+          throw new Error(
+            errorData.message || "Failed to load auction"
+          );
         }
 
         const data = await response.json();
 
-        setAuctionData(data);
+        setAuctionData({
+          ...data,
+          id: data._id || data.id,
+        });
+
         setBidHistory(data.bidHistory || []);
       } catch (error) {
         console.error("Auction details error:", error);
-        setError("Unable to load auction details.");
+
+        setError(
+          error.message || "Unable to load auction details."
+        );
       } finally {
         setLoading(false);
       }
     }
 
     loadAuction();
-  }, [auction.id]);
+  }, [auction?._id, auction?.id]);
 
   async function handleBid(event) {
     event.preventDefault();
@@ -63,16 +83,21 @@ function AuctionDetails({ auction, onBack }) {
 
     const amount = Number(bidAmount);
 
+    if (!bidder.trim()) {
+      setError("Please enter your name.");
+      return;
+    }
+
     if (!Number.isFinite(amount) || amount <= 0) {
       setError("Please enter a valid bid amount.");
       return;
     }
 
-    if (amount <= auctionData.price) {
+    if (amount <= Number(auctionData.price)) {
       setError(
-        `Your bid must be higher than ৳${auctionData.price.toLocaleString(
-          "en-BD"
-        )}.`
+        `Your bid must be higher than ৳${Number(
+          auctionData.price
+        ).toLocaleString("en-BD")}.`
       );
       return;
     }
@@ -80,8 +105,11 @@ function AuctionDetails({ auction, onBack }) {
     try {
       setPlacingBid(true);
 
+      const auctionId =
+        auctionData?._id || auctionData?.id;
+
       const response = await fetch(
-        `${API_URL}/api/auctions/${auctionData.id}/bids`,
+        `${API_URL}/api/auctions/${auctionId}/bids`,
         {
           method: "POST",
           headers: {
@@ -89,7 +117,7 @@ function AuctionDetails({ auction, onBack }) {
           },
           body: JSON.stringify({
             amount,
-            bidder,
+            bidder: bidder.trim(),
           }),
         }
       );
@@ -97,22 +125,38 @@ function AuctionDetails({ auction, onBack }) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to place bid.");
+        throw new Error(
+          data.message || "Failed to place bid."
+        );
       }
 
-      setAuctionData(data.auction);
+      if (data.auction) {
+        setAuctionData({
+          ...data.auction,
+          id:
+            data.auction._id ||
+            data.auction.id,
+        });
+      }
 
-      setBidHistory((current) => [
-        data.bid,
-        ...current,
-      ]);
+      if (data.bid) {
+        setBidHistory((current) => [
+          data.bid,
+          ...current,
+        ]);
+      }
 
       setBidAmount("");
-      setSuccess("Your bid was placed successfully!");
-
+      setSuccess(
+        "Your bid was placed successfully!"
+      );
     } catch (error) {
       console.error("Bid error:", error);
-      setError(error.message || "Unable to place your bid.");
+
+      setError(
+        error.message ||
+          "Unable to place your bid."
+      );
     } finally {
       setPlacingBid(false);
     }
@@ -121,32 +165,51 @@ function AuctionDetails({ auction, onBack }) {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 text-white">
-        <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-6">
-          <div className="flex items-center gap-3 text-slate-400">
+        <header className="border-b border-white/10">
+          <div className="mx-auto flex max-w-7xl items-center px-6 py-4">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-2 text-sm text-slate-400 hover:text-white"
+            >
+              <ArrowLeft size={16} />
+              Back to auctions
+            </button>
+          </div>
+        </header>
+
+        <div className="flex min-h-[70vh] items-center justify-center">
+          <div className="text-center">
             <Loader2
-              size={22}
-              className="animate-spin text-amber-400"
+              size={40}
+              className="mx-auto animate-spin text-amber-400"
             />
-            Loading auction...
+
+            <p className="mt-4 text-slate-400">
+              Loading auction...
+            </p>
           </div>
         </div>
       </div>
     );
   }
 
-  if (error && !auctionData) {
+  if (error && !auctionData?.title) {
     return (
       <div className="min-h-screen bg-slate-950 text-white">
-        <div className="mx-auto max-w-7xl px-6 py-10">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
-          >
-            <ArrowLeft size={18} />
-            Back to auctions
-          </button>
+        <header className="border-b border-white/10">
+          <div className="mx-auto flex max-w-7xl items-center px-6 py-4">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-2 text-sm text-slate-400 hover:text-white"
+            >
+              <ArrowLeft size={16} />
+              Back to auctions
+            </button>
+          </div>
+        </header>
 
-          <div className="mt-12 rounded-2xl border border-red-400/20 bg-red-400/5 p-8 text-center">
+        <div className="mx-auto max-w-7xl px-6 py-12">
+          <div className="rounded-2xl border border-red-400/20 bg-red-400/5 p-8 text-center">
             <AlertCircle
               size={36}
               className="mx-auto text-red-400"
@@ -159,6 +222,13 @@ function AuctionDetails({ auction, onBack }) {
             <p className="mt-2 text-slate-500">
               {error}
             </p>
+
+            <button
+              onClick={onBack}
+              className="mt-6 rounded-xl bg-amber-400 px-5 py-3 font-bold text-slate-950"
+            >
+              Back to auctions
+            </button>
           </div>
         </div>
       </div>
@@ -172,9 +242,9 @@ function AuctionDetails({ auction, onBack }) {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 text-sm font-semibold text-slate-400 transition hover:text-white"
+            className="flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={16} />
             Back to auctions
           </button>
 
@@ -184,7 +254,10 @@ function AuctionDetails({ auction, onBack }) {
             </div>
 
             <p className="font-black tracking-tight">
-              AUCTION<span className="text-amber-400">BD</span>
+              AUCTION
+              <span className="text-amber-400">
+                BD
+              </span>
             </p>
           </div>
         </div>
@@ -211,6 +284,10 @@ function AuctionDetails({ auction, onBack }) {
                 src={auctionData.image}
                 alt={auctionData.title}
                 className="h-full w-full object-cover"
+                onError={(event) => {
+                  event.currentTarget.src =
+                    "https://placehold.co/800x800/0f172a/fbbf24?text=Auction+BD";
+                }}
               />
 
               {/* LIVE BADGE */}
@@ -232,8 +309,8 @@ function AuctionDetails({ auction, onBack }) {
             </h1>
 
             <p className="mt-4 leading-7 text-slate-500">
-              Place your bid before the auction ends. The highest
-              valid bid wins the auction.
+              {auctionData.description ||
+                "Place your bid before the auction ends. The highest valid bid wins the auction."}
             </p>
 
             {/* CURRENT BID */}
@@ -245,7 +322,9 @@ function AuctionDetails({ auction, onBack }) {
               <div className="mt-2 flex items-end justify-between gap-4">
                 <p className="text-4xl font-black text-amber-400">
                   ৳
-                  {auctionData.price.toLocaleString("en-BD")}
+                  {Number(
+                    auctionData.price || 0
+                  ).toLocaleString("en-BD")}
                 </p>
 
                 <div className="text-right">
@@ -254,7 +333,7 @@ function AuctionDetails({ auction, onBack }) {
                   </p>
 
                   <p className="text-xl font-bold">
-                    {auctionData.bids}
+                    {auctionData.bids || 0}
                   </p>
                 </div>
               </div>
@@ -349,14 +428,14 @@ function AuctionDetails({ auction, onBack }) {
                   <input
                     id="bidAmount"
                     type="number"
-                    min={auctionData.price + 1}
+                    min={Number(auctionData.price || 0) + 1}
                     value={bidAmount}
                     onChange={(event) =>
                       setBidAmount(event.target.value)
                     }
-                    placeholder={`More than ${auctionData.price.toLocaleString(
-                      "en-BD"
-                    )}`}
+                    placeholder={`More than ${Number(
+                      auctionData.price || 0
+                    ).toLocaleString("en-BD")}`}
                     className="w-full bg-transparent px-3 py-3 outline-none placeholder:text-slate-600"
                   />
                 </div>
@@ -479,7 +558,11 @@ function AuctionDetails({ auction, onBack }) {
               <div className="divide-y divide-white/10">
                 {bidHistory.map((bid, index) => (
                   <div
-                    key={bid.id}
+                    key={
+                      bid._id ||
+                      bid.id ||
+                      `${bid.bidder}-${bid.createdAt}-${index}`
+                    }
                     className="flex items-center justify-between gap-4 bg-white/[0.02] px-5 py-4 transition hover:bg-white/[0.04]"
                   >
                     <div className="flex items-center gap-4">
@@ -493,7 +576,9 @@ function AuctionDetails({ auction, onBack }) {
                         </p>
 
                         <p className="mt-1 text-xs text-slate-600">
-                          {formatBidDate(bid.createdAt)}
+                          {formatBidDate(
+                            bid.createdAt
+                          )}
                         </p>
                       </div>
                     </div>
@@ -501,9 +586,9 @@ function AuctionDetails({ auction, onBack }) {
                     <div className="text-right">
                       <p className="font-bold text-amber-400">
                         ৳
-                        {bid.amount.toLocaleString(
-                          "en-BD"
-                        )}
+                        {Number(
+                          bid.amount || 0
+                        ).toLocaleString("en-BD")}
                       </p>
 
                       {index === 0 && (
