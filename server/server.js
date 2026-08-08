@@ -1,87 +1,74 @@
 import dns from "dns";
-
-dns.setServers([
-  "8.8.8.8",
-  "1.1.1.1",
-]);
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import auctionRoutes from "./routes/auctionRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
+import sellerRoutes from "./routes/sellerRoutes.js";
 
 dotenv.config();
 
 const app = express();
+const PORT = Number(process.env.PORT) || 5000;
 
-const PORT = process.env.PORT || 5000;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+// Security
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
 
-// ========================================
-// MIDDLEWARE
-// ========================================
-
+// CORS
 app.use(
   cors({
-    origin: "*",
-    methods: [
-      "GET",
-      "POST",
-      "PUT",
-      "PATCH",
-      "DELETE",
-      "OPTIONS",
-    ],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-    ],
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Admin-Key"],
   })
 );
 
-app.use(express.json());
+// Request body
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader(
+    "Referrer-Policy",
+    "strict-origin-when-cross-origin"
+  );
+  next();
+});
 
-// ========================================
-// API ROUTES
-// ========================================
-
-// Public auction API
+// Uploaded seller images/videos
 app.use(
-  "/api/auctions",
-  auctionRoutes
+  "/uploads",
+  express.static(path.join(__dirname, "uploads"))
 );
 
-// Protected admin API
-app.use(
-  "/api/admin",
-  adminRoutes
-);
-
-
-// ========================================
-// HEALTH CHECK
-// ========================================
-
+// Health check
 app.get("/api/health", (req, res) => {
-  res.status(200).json({
+  res.json({
     status: "ok",
-    message: "AuctionBD API is running",
     database:
       mongoose.connection.readyState === 1
         ? "connected"
         : "disconnected",
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
   });
 });
 
-
-// ========================================
-// ROOT ROUTE
-// ========================================
-
+// API information
 app.get("/", (req, res) => {
   res.json({
     name: "AuctionBD API",
@@ -90,84 +77,85 @@ app.get("/", (req, res) => {
   });
 });
 
+// ==================== API ROUTES ====================
 
-// ========================================
-// 404 HANDLER
-// ========================================
+app.use("/api/auth", authRoutes);
+app.use("/api/auctions", auctionRoutes);
+app.use("/api/sellers", sellerRoutes);
+app.use("/api/admin", adminRoutes);
+
+// ==================== 404 ====================
 
 app.use((req, res) => {
   res.status(404).json({
-    message: "API endpoint not found",
+    message: "API endpoint not found.",
     path: req.originalUrl,
   });
 });
 
-
-// ========================================
-// GLOBAL ERROR HANDLER
-// ========================================
+// ==================== ERROR HANDLER ====================
 
 app.use((error, req, res, next) => {
   console.error("Server error:", error);
 
-  res.status(
-    error.status || 500
-  ).json({
+  res.status(error.status || 500).json({
     message:
-      error.message ||
-      "Internal server error",
+      process.env.NODE_ENV === "production"
+        ? "Internal server error."
+        : error.message || "Internal server error.",
   });
 });
 
-
-// ========================================
-// MONGODB CONNECTION
-// ========================================
+// ==================== DATABASE ====================
 
 async function connectDatabase() {
+  if (!process.env.MONGO_URI) {
+    throw new Error(
+      "MONGO_URI is missing from environment variables."
+    );
+  }
+
+  await mongoose.connect(process.env.MONGO_URI, {
+    serverSelectionTimeoutMS: 10000,
+    maxPoolSize: 10,
+    minPoolSize: 2,
+  });
+
+  console.log("MongoDB connected successfully ✅");
+}
+
+// ==================== START ====================
+
+async function startServer() {
   try {
-    console.log(
-      "Connecting to MongoDB..."
-    );
+    await connectDatabase();
 
-    await mongoose.connect(
-      process.env.MONGO_URI,
-      {
-        serverSelectionTimeoutMS: 10000,
-      }
-    );
-
-    console.log(
-      "MongoDB connected successfully ✅"
-    );
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`AuctionBD API running on port ${PORT} 🚀`);
+      console.log(`Local API: http://localhost:${PORT}`);
+    });
   } catch (error) {
-    console.error(
-      "MongoDB connection failed ❌"
-    );
-
-    console.error(error);
-
+    console.error("Server startup failed ❌", error);
     process.exit(1);
   }
 }
 
+// ==================== SHUTDOWN ====================
 
-// ========================================
-// START SERVER
-// ========================================
+async function shutdown(signal) {
+  console.log(`${signal}: shutting down...`);
 
-async function startServer() {
-  await connectDatabase();
-
-  app.listen(
-    PORT,
-    "0.0.0.0",
-    () => {
-      console.log(
-        `AuctionBD API running on port ${PORT}`
-      );
-    }
-  );
+  try {
+    await mongoose.connection.close();
+    console.log("MongoDB connection closed.");
+  } catch (error) {
+    console.error("Error closing MongoDB:", error);
+  } finally {
+    process.exit(0);
+  }
 }
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 startServer();

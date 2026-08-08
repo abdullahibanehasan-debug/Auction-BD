@@ -1,227 +1,604 @@
 import express from "express";
-import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
+
 import Auction from "../models/Auction.js";
-import adminAuth from "../middleware/adminAuth.js";
 
 const router = express.Router();
 
-
-// ===============================
-// ADMIN LOGIN
-// ===============================
-
-router.post("/login", (req, res) => {
-  try {
-    const { username, password } = req.body;
-
-    if (
-      username !== process.env.ADMIN_USERNAME ||
-      password !== process.env.ADMIN_PASSWORD
-    ) {
-      return res.status(401).json({
-        message: "Invalid username or password",
-      });
-    }
-
-    const token = jwt.sign(
-      {
-        role: "admin",
-        username,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "24h",
-      }
-    );
-
-    res.json({
-      message: "Login successful",
-      token,
-    });
-  } catch (error) {
-    console.error("Admin login error:", error);
-
-    res.status(500).json({
-      message: "Login failed",
-    });
-  }
-});
-
-
-// ===============================
-// VERIFY ADMIN SESSION
-// ===============================
-
-router.get("/me", adminAuth, (req, res) => {
+router.get("/", (req, res) => {
   res.json({
-    authenticated: true,
-    role: "admin",
+    name: "AuctionBD Admin API",
+    status: "running",
+    endpoints: {
+      stats: "/api/admin/stats",
+      auctions: "/api/admin/auctions",
+    },
   });
 });
 
+const isValidId = (id) =>
+  mongoose.Types.ObjectId.isValid(id);
 
-// ===============================
-// GET ALL AUCTIONS
-// ===============================
+/*
+ * Optional admin protection.
+ *
+ * If ADMIN_KEY exists in .env,
+ * requests must send:
+ *
+ * X-Admin-Key: your-key
+ *
+ * Keeping it optional right now means
+ * your existing AdminPanel continues working.
+ */
+function adminProtection(req, res, next) {
+  const configuredKey =
+    process.env.ADMIN_KEY;
 
-router.get("/auctions", adminAuth, async (req, res) => {
-  try {
-    const auctions = await Auction.find()
-      .sort({ createdAt: -1 });
+  if (!configuredKey) {
+    return next();
+  }
 
-    res.json(auctions);
-  } catch (error) {
-    console.error("Admin get auctions error:", error);
+  const providedKey =
+    req.headers["x-admin-key"];
 
-    res.status(500).json({
-      message: error.message,
+  if (
+    !providedKey ||
+    providedKey !== configuredKey
+  ) {
+    return res.status(401).json({
+      message:
+        "Admin authorization required.",
     });
   }
-});
 
+  next();
+}
 
-// ===============================
-// CREATE AUCTION
-// ===============================
+router.use(adminProtection);
 
-router.post("/auctions", adminAuth, async (req, res) => {
+// Automatically end expired auctions.
+async function expireAuctions() {
+  await Auction.updateMany(
+    {
+      status: "active",
+      endDate: {
+        $ne: null,
+        $lte: new Date(),
+      },
+      deleted: false,
+    },
+    {
+      $set: {
+        status: "ended",
+      },
+    }
+  );
+}
+
+// DASHBOARD STATS
+router.get("/stats", async (req, res) => {
   try {
-    const auction = new Auction({
-      title: req.body.title,
-      category: req.body.category,
-      categoryGroup: req.body.categoryGroup,
-      price: Number(req.body.price),
-      bids: 0,
-      time: req.body.time,
-      image: req.body.image,
-      description: req.body.description || "",
-      seller: req.body.seller || "AuctionBD",
-      status: req.body.status || "active",
-      bidHistory: [],
-    });
+    await expireAuctions();
 
-    const savedAuction = await auction.save();
+    const now = new Date();
 
-    res.status(201).json({
-      message: "Auction created successfully",
-      auction: savedAuction,
-    });
-  } catch (error) {
-    console.error("Create auction error:", error);
+    const monthStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1
+    );
 
-    res.status(400).json({
-      message: error.message,
-    });
-  }
-});
+    const [
+      totalAuctions,
+      activeAuctions,
+      soldAuctions,
+      endedAuctions,
+      pendingAuctions,
+      cancelledAuctions,
+      bidStats,
+      salesStats,
+      monthlyStats,
+      viewsStats,
+      recentAuctions,
+    ] = await Promise.all([
+      Auction.countDocuments({
+        deleted: false,
+      }),
 
+      Auction.countDocuments({
+        status: "active",
+        deleted: false,
+      }),
 
-// ===============================
-// UPDATE AUCTION
-// ===============================
+      Auction.countDocuments({
+        status: "sold",
+        deleted: false,
+      }),
 
-router.put("/auctions/:id", adminAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
+      Auction.countDocuments({
+        status: "ended",
+        deleted: false,
+      }),
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        message: "Invalid auction ID",
-      });
-    }
+      Auction.countDocuments({
+        status: "pending",
+        deleted: false,
+      }),
 
-    const auction = await Auction.findById(id);
+      Auction.countDocuments({
+        status: "cancelled",
+        deleted: false,
+      }),
 
-    if (!auction) {
-      return res.status(404).json({
-        message: "Auction not found",
-      });
-    }
+      Auction.aggregate([
+        {
+          $match: {
+            deleted: false,
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: {
+              $sum: "$bids",
+            },
+          },
+        },
+      ]),
 
-    if (req.body.title !== undefined) {
-      auction.title = req.body.title;
-    }
+      Auction.aggregate([
+        {
+          $match: {
+            status: "sold",
+            deleted: false,
+          },
+        },
+        {
+          $group: {
+            _id: null,
 
-    if (req.body.category !== undefined) {
-      auction.category = req.body.category;
-    }
+            sales: {
+              $sum: {
+                $cond: [
+                  {
+                    $gt: [
+                      "$soldPrice",
+                      0,
+                    ],
+                  },
+                  "$soldPrice",
+                  "$price",
+                ],
+              },
+            },
 
-    if (req.body.categoryGroup !== undefined) {
-      auction.categoryGroup =
-        req.body.categoryGroup;
-    }
+            commission: {
+              $sum: {
+                $multiply: [
+                  {
+                    $cond: [
+                      {
+                        $gt: [
+                          "$soldPrice",
+                          0,
+                        ],
+                      },
+                      "$soldPrice",
+                      "$price",
+                    ],
+                  },
+                  {
+                    $divide: [
+                      "$commissionRate",
+                      100,
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ]),
 
-    if (req.body.price !== undefined) {
-      auction.price = Number(req.body.price);
-    }
+      Auction.aggregate([
+        {
+          $match: {
+            status: "sold",
+            soldAt: {
+              $gte: monthStart,
+            },
+            deleted: false,
+          },
+        },
+        {
+          $group: {
+            _id: null,
 
-    if (req.body.time !== undefined) {
-      auction.time = req.body.time;
-    }
+            sales: {
+              $sum: {
+                $cond: [
+                  {
+                    $gt: [
+                      "$soldPrice",
+                      0,
+                    ],
+                  },
+                  "$soldPrice",
+                  "$price",
+                ],
+              },
+            },
+          },
+        },
+      ]),
 
-    if (req.body.image !== undefined) {
-      auction.image = req.body.image;
-    }
+      Auction.aggregate([
+        {
+          $match: {
+            deleted: false,
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: {
+              $sum: "$views",
+            },
+          },
+        },
+      ]),
 
-    if (req.body.description !== undefined) {
-      auction.description =
-        req.body.description;
-    }
+      Auction.find({
+        deleted: false,
+      })
+        .sort({
+          createdAt: -1,
+        })
+        .limit(10),
+    ]);
 
-    if (req.body.seller !== undefined) {
-      auction.seller = req.body.seller;
-    }
+    const totalSales =
+      salesStats[0]?.sales || 0;
 
-    if (req.body.status !== undefined) {
-      auction.status = req.body.status;
-    }
+    const totalCommission =
+      salesStats[0]?.commission || 0;
 
-    const updatedAuction =
-      await auction.save();
+    const monthlySales =
+      monthlyStats[0]?.sales || 0;
 
     res.json({
-      message: "Auction updated successfully",
-      auction: updatedAuction,
+      totalAuctions,
+      activeAuctions,
+      soldAuctions,
+      endedAuctions,
+      pendingAuctions,
+      cancelledAuctions,
+
+      totalBids:
+        bidStats[0]?.total || 0,
+
+      totalViews:
+        viewsStats[0]?.total || 0,
+
+      totalSales,
+      totalCommission,
+
+      monthlySales,
+
+      monthlyCommission:
+        monthlySales * 0.05,
+
+      commissionRate: 5,
+
+      recentAuctions,
     });
   } catch (error) {
-    console.error("Update auction error:", error);
+    console.error(
+      "Admin stats error:",
+      error
+    );
 
-    res.status(400).json({
-      message: error.message,
+    res.status(500).json({
+      message:
+        "Unable to load admin statistics.",
     });
   }
 });
 
-
-// ===============================
-// DELETE AUCTION
-// ===============================
-
-router.delete(
-  "/auctions/:id",
-  adminAuth,
+// GET ADMIN AUCTIONS
+router.get(
+  "/auctions",
   async (req, res) => {
     try {
-      const { id } = req.params;
+      const {
+        page = 1,
+        limit = 50,
+        status,
+        search,
+      } = req.query;
 
-      if (!mongoose.Types.ObjectId.isValid(id)) {
+      const filter = {
+        deleted: false,
+      };
+
+      if (
+        status &&
+        status !== "all"
+      ) {
+        filter.status = status;
+      }
+
+      if (search?.trim()) {
+        filter.$text = {
+          $search: search.trim(),
+        };
+      }
+
+      const currentPage = Math.max(
+        Number(page) || 1,
+        1
+      );
+
+      const pageSize = Math.min(
+        Math.max(
+          Number(limit) || 50,
+          1
+        ),
+        100
+      );
+
+      const [
+        auctions,
+        total,
+      ] = await Promise.all([
+        Auction.find(filter)
+          .sort({
+            createdAt: -1,
+          })
+          .skip(
+            (currentPage - 1) *
+              pageSize
+          )
+          .limit(pageSize),
+
+        Auction.countDocuments(filter),
+      ]);
+
+      res.json({
+        auctions,
+        pagination: {
+          page: currentPage,
+          limit: pageSize,
+          total,
+          pages: Math.ceil(
+            total / pageSize
+          ),
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Admin auction list error:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to load auctions.",
+      });
+    }
+  }
+);
+
+// CREATE AUCTION
+router.post(
+  "/auctions",
+  async (req, res) => {
+    try {
+      const {
+        title,
+        category,
+        categoryGroup,
+        description = "",
+        image,
+        price,
+        startingPrice,
+        seller,
+        sellerId,
+        sellerEmail,
+        sellerPhone,
+        time = "Live",
+        startDate,
+        endDate,
+        status = "active",
+      } = req.body;
+
+      if (
+        !title ||
+        !category ||
+        !categoryGroup ||
+        !image
+      ) {
         return res.status(400).json({
-          message: "Invalid auction ID",
+          message:
+            "Title, category, category group and image are required.",
+        });
+      }
+
+      const starting = Number(
+        startingPrice ?? price ?? 0
+      );
+
+      if (
+        !Number.isFinite(starting) ||
+        starting < 0
+      ) {
+        return res.status(400).json({
+          message:
+            "Invalid starting price.",
         });
       }
 
       const auction =
-        await Auction.findByIdAndDelete(id);
+        await Auction.create({
+          title,
+          category,
+          categoryGroup,
+          description,
+          image,
+
+          startingPrice: starting,
+          price: starting,
+
+          seller,
+          sellerId,
+          sellerEmail,
+          sellerPhone,
+
+          time,
+
+          startDate:
+            startDate || new Date(),
+
+          endDate:
+            endDate || null,
+
+          status,
+          approved: true,
+        });
+
+      res.status(201).json(auction);
+    } catch (error) {
+      console.error(
+        "Create auction error:",
+        error
+      );
+
+      res.status(400).json({
+        message: error.message,
+      });
+    }
+  }
+);
+
+// UPDATE AUCTION
+router.put(
+  "/auctions/:id",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!isValidId(id)) {
+        return res.status(400).json({
+          message:
+            "Invalid auction ID.",
+        });
+      }
+
+      const allowedFields = [
+        "title",
+        "category",
+        "categoryGroup",
+        "description",
+        "image",
+        "startingPrice",
+        "time",
+        "startDate",
+        "endDate",
+        "seller",
+        "sellerId",
+        "sellerEmail",
+        "sellerPhone",
+        "commissionRate",
+        "status",
+        "approved",
+      ];
+
+      const updates = {};
+
+      for (const field of allowedFields) {
+        if (
+          req.body[field] !==
+          undefined
+        ) {
+          updates[field] =
+            req.body[field];
+        }
+      }
+
+      const auction =
+        await Auction.findOneAndUpdate(
+          {
+            _id: id,
+            deleted: false,
+          },
+          updates,
+          {
+            new: true,
+            runValidators: true,
+          }
+        );
 
       if (!auction) {
         return res.status(404).json({
-          message: "Auction not found",
+          message:
+            "Auction not found.",
+        });
+      }
+
+      res.json(auction);
+    } catch (error) {
+      console.error(
+        "Update auction error:",
+        error
+      );
+
+      res.status(400).json({
+        message: error.message,
+      });
+    }
+  }
+);
+
+// SOFT DELETE
+router.delete(
+  "/auctions/:id",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!isValidId(id)) {
+        return res.status(400).json({
+          message:
+            "Invalid auction ID.",
+        });
+      }
+
+      const auction =
+        await Auction.findOneAndUpdate(
+          {
+            _id: id,
+            deleted: false,
+          },
+          {
+            deleted: true,
+            status: "cancelled",
+          },
+          {
+            new: true,
+          }
+        );
+
+      if (!auction) {
+        return res.status(404).json({
+          message:
+            "Auction not found.",
         });
       }
 
       res.json({
-        message: "Auction deleted successfully",
+        message:
+          "Auction archived successfully.",
+        auction,
       });
     } catch (error) {
       console.error(
@@ -230,11 +607,254 @@ router.delete(
       );
 
       res.status(500).json({
-        message: error.message,
+        message:
+          "Unable to archive auction.",
       });
     }
   }
 );
 
+// APPROVE
+router.patch(
+  "/auctions/:id/approve",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!isValidId(id)) {
+        return res.status(400).json({
+          message:
+            "Invalid auction ID.",
+        });
+      }
+
+      const auction =
+        await Auction.findOneAndUpdate(
+          {
+            _id: id,
+            deleted: false,
+          },
+          {
+            approved: true,
+            status: "active",
+          },
+          {
+            new: true,
+          }
+        );
+
+      if (!auction) {
+        return res.status(404).json({
+          message:
+            "Auction not found.",
+        });
+      }
+
+      res.json(auction);
+    } catch (error) {
+      console.error(
+        "Approve auction error:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to approve auction.",
+      });
+    }
+  }
+);
+
+// MARK SOLD
+router.patch(
+  "/auctions/:id/sold",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!isValidId(id)) {
+        return res.status(400).json({
+          message:
+            "Invalid auction ID.",
+        });
+      }
+
+      const auction =
+        await Auction.findOne({
+          _id: id,
+          deleted: false,
+        });
+
+      if (!auction) {
+        return res.status(404).json({
+          message:
+            "Auction not found.",
+        });
+      }
+
+      const soldPrice = Number(
+        req.body.soldPrice ??
+          auction.price
+      );
+
+      if (
+        !Number.isFinite(
+          soldPrice
+        ) ||
+        soldPrice < 0
+      ) {
+        return res.status(400).json({
+          message:
+            "Invalid sold price.",
+        });
+      }
+
+      auction.soldPrice =
+        soldPrice;
+
+      auction.price =
+        soldPrice;
+
+      auction.status =
+        "sold";
+
+      auction.soldAt =
+        new Date();
+
+      const highestBid = [
+        ...(auction.bidHistory || []),
+      ].sort(
+        (a, b) =>
+          b.amount - a.amount
+      )[0];
+
+      if (highestBid) {
+        auction.winnerName =
+          highestBid.bidder;
+      }
+
+      await auction.save();
+
+      res.json(auction);
+    } catch (error) {
+      console.error(
+        "Mark sold error:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to mark auction as sold.",
+      });
+    }
+  }
+);
+
+// END
+router.patch(
+  "/auctions/:id/end",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!isValidId(id)) {
+        return res.status(400).json({
+          message:
+            "Invalid auction ID.",
+        });
+      }
+
+      const auction =
+        await Auction.findOneAndUpdate(
+          {
+            _id: id,
+            deleted: false,
+            status: "active",
+          },
+          {
+            status: "ended",
+          },
+          {
+            new: true,
+          }
+        );
+
+      if (!auction) {
+        return res.status(404).json({
+          message:
+            "Active auction not found.",
+        });
+      }
+
+      res.json(auction);
+    } catch (error) {
+      console.error(
+        "End auction error:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to end auction.",
+      });
+    }
+  }
+);
+
+// CANCEL
+router.patch(
+  "/auctions/:id/cancel",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!isValidId(id)) {
+        return res.status(400).json({
+          message:
+            "Invalid auction ID.",
+        });
+      }
+
+      const auction =
+        await Auction.findOneAndUpdate(
+          {
+            _id: id,
+            deleted: false,
+            status: {
+              $in: [
+                "active",
+                "pending",
+              ],
+            },
+          },
+          {
+            status: "cancelled",
+          },
+          {
+            new: true,
+          }
+        );
+
+      if (!auction) {
+        return res.status(404).json({
+          message:
+            "Auction not found.",
+        });
+      }
+
+      res.json(auction);
+    } catch (error) {
+      console.error(
+        "Cancel auction error:",
+        error
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to cancel auction.",
+      });
+    }
+  }
+);
 
 export default router;
