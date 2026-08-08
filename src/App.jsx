@@ -38,7 +38,7 @@ CONFIG
 
 const API_URL = (
   import.meta.env.VITE_API_URL ||
-  "https://auction-bd.onrender.com"
+  "https://auction-bd-api.onrender.com"
 ).replace(/\/+$/, "");
 
 const TOKEN_KEY = "auctionbd_token";
