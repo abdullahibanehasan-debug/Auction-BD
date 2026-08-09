@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      minlength: 2,
       maxlength: 120,
     },
 
@@ -31,18 +32,21 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
+    // User cannot log in until this becomes true
     verified: {
       type: Boolean,
       default: false,
       index: true,
     },
 
+    // SHA-256 hashed verification token
     verificationToken: {
       type: String,
       default: "",
       select: false,
     },
 
+    // Verification token expiry date
     verificationExpires: {
       type: Date,
       default: null,
@@ -56,12 +60,50 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Admin can disable an account without deleting it
     active: {
       type: Boolean,
       default: true,
+      index: true,
+    },
+
+    // Useful for future account management and security
+    lastLoginAt: {
+      type: Date,
+      default: null,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    versionKey: false,
+  }
 );
+
+/* =========================================================
+   INDEXES
+========================================================= */
+
+// Useful for admin/user filtering
+userSchema.index({
+  role: 1,
+  active: 1,
+  verified: 1,
+});
+
+/* =========================================================
+   SAFE JSON
+   Prevent sensitive fields from accidentally appearing
+   in JSON responses.
+========================================================= */
+
+userSchema.set("toJSON", {
+  transform(_doc, ret) {
+    delete ret.password;
+    delete ret.verificationToken;
+    delete ret.verificationExpires;
+
+    return ret;
+  },
+});
 
 export default mongoose.model("User", userSchema);

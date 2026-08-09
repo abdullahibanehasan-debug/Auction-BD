@@ -20,7 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /* =========================================================
-   SERVER
+   SERVER SETTINGS
 ========================================================= */
 
 app.disable("x-powered-by");
@@ -40,6 +40,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin(origin, callback) {
+      // Allow Postman, server-to-server requests, Render health checks
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
@@ -181,15 +182,22 @@ app.get("/api", (req, res) => {
 ========================================================= */
 
 app.get("/api/health", (req, res) => {
-  res.status(200).json({
-    success: true,
-    status: "ok",
+  const databaseConnected =
+    mongoose.connection.readyState === 1;
+
+  res.status(
+    databaseConnected ? 200 : 503
+  ).json({
+    success: databaseConnected,
+    status: databaseConnected
+      ? "ok"
+      : "degraded",
+
     server: "AuctionBD API",
 
-    database:
-      mongoose.connection.readyState === 1
-        ? "connected"
-        : "disconnected",
+    database: databaseConnected
+      ? "connected"
+      : "disconnected",
 
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
@@ -200,31 +208,16 @@ app.get("/api/health", (req, res) => {
    API ROUTES
 ========================================================= */
 
-app.use(
-  "/api/auth",
-  authRoutes
-);
+app.use("/api/auth", authRoutes);
 
-app.use(
-  "/api/auctions",
-  auctionRoutes
-);
+app.use("/api/auctions", auctionRoutes);
 
-app.use(
-  "/api/admin",
-  adminRoutes
-);
+app.use("/api/admin", adminRoutes);
 
-app.use(
-  "/api/seller-requests",
-  sellerRoutes
-);
+app.use("/api/seller-requests", sellerRoutes);
 
 /* Backward compatibility */
-app.use(
-  "/api/sellers",
-  sellerRoutes
-);
+app.use("/api/sellers", sellerRoutes);
 
 /* =========================================================
    404
@@ -247,28 +240,39 @@ app.use((req, res) => {
    ERROR HANDLER
 ========================================================= */
 
-app.use(
-  (error, req, res, next) => {
-    console.error(
-      "Unhandled server error:",
-      error
-    );
+app.use((error, req, res, next) => {
+  console.error(
+    "Unhandled server error:",
+    error
+  );
 
-    if (res.headersSent) {
-      return next(error);
-    }
+  if (res.headersSent) {
+    return next(error);
+  }
 
-    res.status(error.status || 500).json({
+  // CORS errors
+  if (
+    error.message ===
+    "Not allowed by CORS"
+  ) {
+    return res.status(403).json({
       success: false,
-
-      message:
-        process.env.NODE_ENV === "production"
-          ? "Internal server error."
-          : error.message ||
-            "Internal server error.",
+      message: "This origin is not allowed.",
     });
   }
-);
+
+  return res.status(
+    error.status || 500
+  ).json({
+    success: false,
+    message:
+      process.env.NODE_ENV ===
+      "production"
+        ? "Internal server error."
+        : error.message ||
+          "Internal server error.",
+  });
+});
 
 /* =========================================================
    DATABASE
@@ -295,7 +299,7 @@ async function connectDatabase() {
       serverSelectionTimeoutMS: 15000,
       socketTimeoutMS: 45000,
       maxPoolSize: 10,
-      minPoolSize: 2,
+      minPoolSize: 1,
       family: 4,
     }
   );
@@ -325,10 +329,7 @@ async function startServer() {
           "🔥 AUCTIONBD SERVER STARTED 🔥"
         );
 
-        console.log(
-          `Port: ${PORT}`
-        );
-
+        console.log(`Port: ${PORT}`);
         console.log(
           `Local: http://localhost:${PORT}`
         );
@@ -361,7 +362,13 @@ async function startServer() {
    GRACEFUL SHUTDOWN
 ========================================================= */
 
+let shuttingDown = false;
+
 async function shutdown(signal) {
+  if (shuttingDown) return;
+
+  shuttingDown = true;
+
   console.log(
     `${signal}: shutting down...`
   );

@@ -11,6 +11,7 @@ import AuctionDetails from "./AuctionDetails";
 
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   Clock3,
@@ -61,6 +62,7 @@ const CATEGORIES = [
 
 const MAX_IMAGES = 10;
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+
 const MAX_VIDEOS = 2;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 
@@ -92,14 +94,23 @@ function getUser() {
 function saveAuth(token, user) {
   try {
     if (token) {
-      localStorage.setItem(KEYS.token, token);
+      localStorage.setItem(
+        KEYS.token,
+        token
+      );
     }
 
     if (user) {
-      localStorage.setItem(KEYS.user, JSON.stringify(user));
+      localStorage.setItem(
+        KEYS.user,
+        JSON.stringify(user)
+      );
     }
   } catch (error) {
-    console.error("Auth storage error:", error);
+    console.error(
+      "Auth storage error:",
+      error
+    );
   }
 }
 
@@ -120,74 +131,63 @@ async function api(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  if (!(options.body instanceof FormData)) {
-    headers["Content-Type"] = "application/json";
+  if (
+    !(options.body instanceof FormData) &&
+    !headers["Content-Type"]
+  ) {
+    headers["Content-Type"] =
+      "application/json";
   }
 
   const token = getToken();
 
   if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    headers.Authorization =
+      `Bearer ${token}`;
   }
 
   let response;
 
   try {
-    response = await fetch(`${API_URL}${path}`, {
-      ...options,
-      headers,
-      credentials: "include",
-      cache: options.cache || "no-store",
-    });
+    response = await fetch(
+      `${API_URL}${path}`,
+      {
+        ...options,
+        headers,
+        credentials: "include",
+        cache: "no-store",
+      }
+    );
   } catch {
     throw new Error(
       "Unable to connect to AuctionBD. Please check your internet connection."
     );
   }
 
-  const text = await response.text();
+  const text =
+    await response.text();
 
   let data = {};
 
   try {
-    data = text ? JSON.parse(text) : {};
+    data = text
+      ? JSON.parse(text)
+      : {};
   } catch {
     data = {
-      message: text || "Invalid server response.",
+      message:
+        text ||
+        "Invalid server response.",
     };
   }
 
   if (!response.ok) {
-    let message =
+    const error = new Error(
       data?.message ||
-      data?.error ||
-      `Server returned ${response.status}.`;
+        data?.error ||
+        `Server returned ${response.status}.`
+    );
 
-    if (response.status === 401) {
-      message =
-        data?.message ||
-        "Your login session has expired.";
-    }
-
-    if (response.status === 403) {
-      message =
-        data?.message ||
-        "You do not have permission to perform this action.";
-    }
-
-    if (response.status === 404) {
-      message =
-        data?.message ||
-        `API endpoint not found: ${path}`;
-    }
-
-    if (response.status >= 500) {
-      message =
-        data?.message ||
-        "AuctionBD server error. Please try again.";
-    }
-
-    const error = new Error(message);
     error.status = response.status;
     error.data = data;
 
@@ -202,7 +202,9 @@ async function api(path, options = {}) {
 ========================================================= */
 
 const money = (value) =>
-  `৳${Number(value || 0).toLocaleString("en-BD")}`;
+  `৳${Number(
+    value || 0
+  ).toLocaleString("en-BD")}`;
 
 function normalizeAuction(item) {
   return {
@@ -210,7 +212,9 @@ function normalizeAuction(item) {
     id: item?._id || item?.id,
     price: Number(item?.price) || 0,
     bids: Number(item?.bids) || 0,
-    status: String(item?.status || "active").toLowerCase(),
+    status: String(
+      item?.status || "active"
+    ).toLowerCase(),
     image:
       item?.image ||
       item?.images?.[0] ||
@@ -222,41 +226,58 @@ function statusInfo(status) {
   const statuses = {
     sold: {
       label: "SOLD",
-      className: "bg-emerald-500 text-white",
+      className:
+        "bg-emerald-500 text-white",
     },
+
     ended: {
       label: "ENDED",
-      className: "bg-slate-600 text-white",
+      className:
+        "bg-slate-600 text-white",
     },
+
     cancelled: {
       label: "CANCELLED",
-      className: "bg-red-600 text-white",
+      className:
+        "bg-red-600 text-white",
     },
+
     pending: {
       label: "PENDING",
-      className: "bg-yellow-500 text-white",
+      className:
+        "bg-yellow-500 text-white",
     },
+
     active: {
       label: "LIVE",
-      className: "bg-red-500 text-white",
+      className:
+        "bg-red-500 text-white",
     },
   };
 
-  return statuses[status] || statuses.active;
+  return (
+    statuses[status] ||
+    statuses.active
+  );
 }
 
 function formatDate(value) {
   if (!value) return "";
 
-  try {
-    return new Date(value).toLocaleDateString("en-BD", {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleDateString(
+    "en-BD",
+    {
       year: "numeric",
       month: "short",
       day: "numeric",
-    });
-  } catch {
-    return "";
-  }
+    }
+  );
 }
 
 /* =========================================================
@@ -298,10 +319,22 @@ function GlobalStyles({ dark }) {
 
       .field {
         width: 100%;
-        border: 1px solid ${dark ? "#334155" : "#e5e7eb"};
+        border: 1px solid ${
+          dark
+            ? "#334155"
+            : "#e5e7eb"
+        };
         border-radius: 12px;
-        background: ${dark ? "#0f172a" : "#fff"};
-        color: ${dark ? "#f8fafc" : "#111827"};
+        background: ${
+          dark
+            ? "#0f172a"
+            : "#ffffff"
+        };
+        color: ${
+          dark
+            ? "#f8fafc"
+            : "#111827"
+        };
         padding: 13px 15px;
         outline: none;
         transition: .2s ease;
@@ -309,16 +342,30 @@ function GlobalStyles({ dark }) {
 
       .field:focus {
         border-color: #f59e0b;
-        box-shadow: 0 0 0 3px rgba(245,158,11,.12);
+        box-shadow:
+          0 0 0 3px
+          rgba(245,158,11,.12);
       }
 
       .field::placeholder {
-        color: ${dark ? "#64748b" : "#9ca3af"};
+        color: ${
+          dark
+            ? "#64748b"
+            : "#9ca3af"
+        };
       }
 
       select option {
-        background: ${dark ? "#0f172a" : "#fff"};
-        color: ${dark ? "#f8fafc" : "#111827"};
+        background: ${
+          dark
+            ? "#0f172a"
+            : "#ffffff"
+        };
+        color: ${
+          dark
+            ? "#f8fafc"
+            : "#111827"
+        };
       }
 
       .line-clamp-2 {
@@ -355,28 +402,39 @@ function Toast({ toast, onClose }) {
   useEffect(() => {
     if (!toast) return;
 
-    const timer = setTimeout(onClose, 3500);
+    const timer = setTimeout(
+      onClose,
+      3500
+    );
 
-    return () => clearTimeout(timer);
+    return () =>
+      clearTimeout(timer);
   }, [toast, onClose]);
 
   if (!toast) return null;
 
-  const success = toast.type === "success";
+  const success =
+    toast.type === "success";
 
   return (
-    <div className="fixed bottom-5 right-5 z-[1000] max-w-sm">
+    <div className="fixed bottom-5 right-5 z-[1000] w-[calc(100%-2.5rem)] max-w-sm">
       <div
-        className={`flex items-start gap-3 rounded-2xl border p-4 shadow-2xl ${
+        className={`flex items-start gap-3 rounded-2xl border p-4 shadow-2xl fade-in ${
           success
             ? "border-emerald-200 bg-emerald-50 text-emerald-800"
             : "border-red-200 bg-red-50 text-red-800"
         }`}
       >
         {success ? (
-          <CheckCircle2 size={20} className="shrink-0" />
+          <CheckCircle2
+            size={20}
+            className="shrink-0"
+          />
         ) : (
-          <AlertCircle size={20} className="shrink-0" />
+          <AlertCircle
+            size={20}
+            className="shrink-0"
+          />
         )}
 
         <p className="flex-1 text-sm font-medium">
@@ -384,6 +442,7 @@ function Toast({ toast, onClose }) {
         </p>
 
         <button
+          type="button"
           onClick={onClose}
           className="opacity-60 hover:opacity-100"
         >
@@ -403,7 +462,11 @@ function ThemeButton({ dark, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      title={dark ? "Switch to light mode" : "Switch to dark mode"}
+      title={
+        dark
+          ? "Switch to light mode"
+          : "Switch to dark mode"
+      }
       className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
         dark
           ? "border-slate-700 bg-slate-900 text-amber-400"
@@ -425,9 +488,8 @@ function AuthModal({
   onSuccess,
   dark,
 }) {
-  const [loginMode, setLoginMode] = useState(
-    mode !== "register"
-  );
+  const [loginMode, setLoginMode] =
+    useState(mode !== "register");
 
   const [form, setForm] = useState({
     name: "",
@@ -437,13 +499,25 @@ function AuthModal({
     confirmPassword: "",
   });
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [loading, setLoading] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
 
   useEffect(() => {
-    const oldOverflow = document.body.style.overflow;
+    setLoginMode(
+      mode !== "register"
+    );
+    setError("");
+  }, [mode]);
 
-    document.body.style.overflow = "hidden";
+  useEffect(() => {
+    const oldOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      "hidden";
 
     const close = (event) => {
       if (event.key === "Escape") {
@@ -451,11 +525,19 @@ function AuthModal({
       }
     };
 
-    window.addEventListener("keydown", close);
+    window.addEventListener(
+      "keydown",
+      close
+    );
 
     return () => {
-      document.body.style.overflow = oldOverflow;
-      window.removeEventListener("keydown", close);
+      document.body.style.overflow =
+        oldOverflow;
+
+      window.removeEventListener(
+        "keydown",
+        close
+      );
     };
   }, [onClose]);
 
@@ -471,61 +553,105 @@ function AuthModal({
 
     setError("");
 
-    const name = form.name.trim();
-    const email = form.email.trim().toLowerCase();
-    const phone = form.phone.trim();
+    const name =
+      form.name.trim();
+
+    const email =
+      form.email
+        .trim()
+        .toLowerCase();
+
+    const phone =
+      form.phone.trim();
+
+    if (!email) {
+      setError(
+        "Please enter your email."
+      );
+      return;
+    }
 
     if (!loginMode) {
       if (name.length < 2) {
-        setError("Please enter your full name.");
+        setError(
+          "Please enter your full name."
+        );
         return;
       }
 
-      if (form.password.length < 6) {
-        setError("Password must be at least 6 characters.");
+      if (
+        form.password.length < 6
+      ) {
+        setError(
+          "Password must be at least 6 characters."
+        );
         return;
       }
 
-      if (form.password !== form.confirmPassword) {
-        setError("Passwords do not match.");
+      if (
+        form.password !==
+        form.confirmPassword
+      ) {
+        setError(
+          "Passwords do not match."
+        );
         return;
       }
-    }
-
-    if (!email) {
-      setError("Please enter your email.");
-      return;
     }
 
     setLoading(true);
 
     try {
-      const path = loginMode
-        ? "/api/auth/login"
-        : "/api/auth/register";
-
-      const body = loginMode
-        ? {
-            email,
-            password: form.password,
+      if (!loginMode) {
+        const data = await api(
+          "/api/auth/register",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              name,
+              email,
+              phone,
+              password:
+                form.password,
+              confirmPassword:
+                form.confirmPassword,
+            }),
           }
-        : {
-            name,
-            email,
-            phone,
-            password: form.password,
-            confirmPassword: form.confirmPassword,
-          };
+        );
 
-      const data = await api(path, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
+        setLoginMode(true);
+
+        setForm({
+          name,
+          email,
+          phone,
+          password: "",
+          confirmPassword: "",
+        });
+
+        setError(
+          data?.message ||
+            "Account created. Please verify your email, then sign in."
+        );
+
+        return;
+      }
+
+      const data = await api(
+        "/api/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            email,
+            password:
+              form.password,
+          }),
+        }
+      );
 
       const token =
         data?.token ||
-        data?.accessToken ||
-        data?.user?.token;
+        data?.accessToken;
 
       const loggedUser =
         data?.user ||
@@ -533,31 +659,25 @@ function AuthModal({
         null;
 
       if (!token) {
-        if (!loginMode) {
-          setLoginMode(true);
-
-          setForm((current) => ({
-            ...current,
-            password: "",
-            confirmPassword: "",
-          }));
-
-          setError(
-            "Account created. Please sign in."
-          );
-
-          return;
-        }
-
         throw new Error(
           "Login succeeded but no token was returned."
         );
       }
 
-      saveAuth(token, loggedUser);
-      onSuccess(loggedUser || getUser());
+      saveAuth(
+        token,
+        loggedUser
+      );
+
+      onSuccess(
+        loggedUser ||
+          getUser()
+      );
     } catch (error) {
-      console.error("Authentication error:", error);
+      console.error(
+        "Authentication error:",
+        error
+      );
 
       setError(
         error?.message ||
@@ -572,24 +692,34 @@ function AuthModal({
     <div
       className="fixed inset-0 z-[999] flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
           onClose();
         }
       }}
     >
       <div
         className={`relative w-full max-w-md rounded-3xl p-7 shadow-2xl ${
-          dark ? "bg-slate-900" : "bg-white"
+          dark
+            ? "bg-slate-900"
+            : "bg-white"
         }`}
       >
         <div className="flex items-start justify-between">
           <div>
             <p
               className={`text-lg font-black ${
-                dark ? "text-white" : "text-gray-900"
+                dark
+                  ? "text-white"
+                  : "text-gray-900"
               }`}
             >
-              AUCTION<span className="text-orange-500">BD</span>
+              AUCTION
+              <span className="text-orange-500">
+                BD
+              </span>
             </p>
 
             <p className="text-[9px] font-semibold tracking-[.2em] text-gray-400">
@@ -608,7 +738,9 @@ function AuthModal({
 
         <h2
           className={`mt-7 text-2xl font-black ${
-            dark ? "text-white" : "text-gray-900"
+            dark
+              ? "text-white"
+              : "text-gray-900"
           }`}
         >
           {loginMode
@@ -634,6 +766,7 @@ function AuthModal({
               size={18}
               className="shrink-0"
             />
+
             <span>{error}</span>
           </div>
         )}
@@ -648,7 +781,10 @@ function AuthModal({
                 required
                 value={form.name}
                 onChange={(e) =>
-                  update("name", e.target.value)
+                  update(
+                    "name",
+                    e.target.value
+                  )
                 }
                 placeholder="Full name"
                 autoComplete="name"
@@ -658,7 +794,10 @@ function AuthModal({
               <input
                 value={form.phone}
                 onChange={(e) =>
-                  update("phone", e.target.value)
+                  update(
+                    "phone",
+                    e.target.value
+                  )
                 }
                 placeholder="Phone number"
                 autoComplete="tel"
@@ -672,7 +811,10 @@ function AuthModal({
             type="email"
             value={form.email}
             onChange={(e) =>
-              update("email", e.target.value)
+              update(
+                "email",
+                e.target.value
+              )
             }
             placeholder="Email address"
             autoComplete="email"
@@ -685,7 +827,10 @@ function AuthModal({
             type="password"
             value={form.password}
             onChange={(e) =>
-              update("password", e.target.value)
+              update(
+                "password",
+                e.target.value
+              )
             }
             placeholder="Password"
             autoComplete={
@@ -701,7 +846,9 @@ function AuthModal({
               required
               minLength={6}
               type="password"
-              value={form.confirmPassword}
+              value={
+                form.confirmPassword
+              }
               onChange={(e) =>
                 update(
                   "confirmPassword",
@@ -725,6 +872,7 @@ function AuthModal({
                   size={18}
                   className="animate-spin"
                 />
+
                 {loginMode
                   ? "Signing in..."
                   : "Creating account..."}
@@ -732,6 +880,7 @@ function AuthModal({
             ) : (
               <>
                 <LogIn size={18} />
+
                 {loginMode
                   ? "Sign In"
                   : "Create Account"}
@@ -743,7 +892,10 @@ function AuthModal({
         <button
           type="button"
           onClick={() => {
-            setLoginMode((value) => !value);
+            setLoginMode(
+              (value) => !value
+            );
+
             setError("");
           }}
           className={`mt-5 w-full rounded-xl border px-4 py-3 text-sm font-semibold ${
@@ -772,12 +924,18 @@ function AuctionCard({
   onFavorite,
   dark,
 }) {
-  const status = statusInfo(auction.status);
-  const active = auction.status === "active";
+  const status = statusInfo(
+    auction.status
+  );
+
+  const active =
+    auction.status === "active";
 
   return (
     <article
-      onClick={() => onOpen(auction)}
+      onClick={() =>
+        onOpen(auction)
+      }
       className={`group cursor-pointer overflow-hidden rounded-2xl border shadow-sm transition hover:-translate-y-1 hover:border-orange-400 hover:shadow-lg ${
         dark
           ? "border-slate-800 bg-slate-900"
@@ -787,13 +945,19 @@ function AuctionCard({
       <div className="relative aspect-[4/3] overflow-hidden">
         <img
           src={auction.image}
-          alt={auction.title || "Auction item"}
+          alt={
+            auction.title ||
+            "Auction item"
+          }
           loading="lazy"
           className={`h-full w-full object-cover transition duration-500 group-hover:scale-105 ${
-            !active ? "opacity-75" : ""
+            !active
+              ? "opacity-75"
+              : ""
           }`}
           onError={(event) => {
-            event.currentTarget.src = FALLBACK_IMAGE;
+            event.currentTarget.src =
+              FALLBACK_IMAGE;
           }}
         />
 
@@ -803,6 +967,7 @@ function AuctionCard({
           {active && (
             <i className="mr-1 inline-block h-2 w-2 animate-pulse rounded-full bg-white" />
           )}
+
           {status.label}
         </span>
 
@@ -815,7 +980,10 @@ function AuctionCard({
           }
           onClick={(event) => {
             event.stopPropagation();
-            onFavorite(auction.id);
+
+            onFavorite(
+              auction.id
+            );
           }}
           className={`absolute right-3 top-3 rounded-full p-2 shadow ${
             favorite
@@ -850,7 +1018,8 @@ function AuctionCard({
               : "text-gray-900"
           }`}
         >
-          {auction.title || "Untitled Auction"}
+          {auction.title ||
+            "Untitled Auction"}
         </h3>
 
         <div className="mt-5 flex justify-between">
@@ -858,7 +1027,8 @@ function AuctionCard({
             <p className="text-xs text-gray-500">
               {auction.status === "sold"
                 ? "Sold for"
-                : auction.status === "ended"
+                : auction.status ===
+                  "ended"
                 ? "Final bid"
                 : "Current bid"}
             </p>
@@ -870,7 +1040,9 @@ function AuctionCard({
                   : "text-gray-900"
               }`}
             >
-              {money(auction.price)}
+              {money(
+                auction.price
+              )}
             </p>
           </div>
 
@@ -903,7 +1075,9 @@ function AuctionCard({
 
             {auction.time ||
               (auction.endTime
-                ? formatDate(auction.endTime)
+                ? formatDate(
+                    auction.endTime
+                  )
                 : status.label)}
           </span>
 
@@ -979,24 +1153,34 @@ function SellerPage({
   dark,
   notify,
 }) {
-  const [form, setForm] = useState({
-    title: "",
-    category: "",
-    categoryGroup: "",
-    condition: "",
-    description: "",
-    expectedPrice: "",
-    location: "",
-    notes: "",
-  });
+  const [form, setForm] =
+    useState({
+      title: "",
+      category: "",
+      categoryGroup: "",
+      condition: "",
+      description: "",
+      expectedPrice: "",
+      location: "",
+      notes: "",
+    });
 
-  const [images, setImages] = useState([]);
-  const [videos, setVideos] = useState([]);
-  const [requests, setRequests] = useState([]);
+  const [images, setImages] =
+    useState([]);
 
-  const [loading, setLoading] = useState(false);
-  const [loadingRequests, setLoadingRequests] =
+  const [videos, setVideos] =
+    useState([]);
+
+  const [requests, setRequests] =
+    useState([]);
+
+  const [loading, setLoading] =
     useState(false);
+
+  const [
+    loadingRequests,
+    setLoadingRequests,
+  ] = useState(false);
 
   const imageInput = useRef(null);
   const videoInput = useRef(null);
@@ -1005,39 +1189,57 @@ function SellerPage({
     ? "border-slate-800 bg-slate-900"
     : "border-gray-200 bg-white";
 
-  const loadRequests = useCallback(async () => {
-    if (!getToken()) return;
+  const loadRequests =
+    useCallback(async () => {
+      if (!getToken()) return;
 
-    setLoadingRequests(true);
+      setLoadingRequests(true);
 
-    try {
-      const data = await api(
-        "/api/seller-requests/mine"
-      );
+      try {
+        const data = await api(
+          "/api/seller-requests/mine"
+        );
 
-      const list = Array.isArray(data)
-        ? data
-        : data?.requests || [];
+        const list =
+          Array.isArray(data)
+            ? data
+            : data?.requests || [];
 
-      setRequests(list);
-    } catch (error) {
-      console.error(
-        "Seller requests:",
-        error
-      );
+        setRequests(list);
+      } catch (error) {
+        console.error(
+          "Seller requests:",
+          error
+        );
 
-      if (error.status === 401) {
-        clearAuth();
-        onLogin();
+        if (
+          error.status === 401
+        ) {
+          clearAuth();
+          onLogin();
+        }
+      } finally {
+        setLoadingRequests(false);
       }
-    } finally {
-      setLoadingRequests(false);
-    }
-  }, [onLogin]);
+    }, [onLogin]);
 
   useEffect(() => {
     loadRequests();
   }, [loadRequests]);
+
+  useEffect(() => {
+    return () => {
+      images.forEach(
+        (item) => {
+          if (item.preview) {
+            URL.revokeObjectURL(
+              item.preview
+            );
+          }
+        }
+      );
+    };
+  }, [images]);
 
   const update = (key, value) => {
     setForm((current) => ({
@@ -1047,25 +1249,43 @@ function SellerPage({
   };
 
   const selectImages = (event) => {
-    const selected = Array.from(
-      event.target.files || []
-    );
+    const selected =
+      Array.from(
+        event.target.files || []
+      );
 
     const valid = [];
     const rejected = [];
 
-    for (const file of selected) {
-      if (!file.type.startsWith("image/")) {
+    for (
+      const file of selected
+    ) {
+      if (
+        !file.type.startsWith(
+          "image/"
+        )
+      ) {
         rejected.push(file.name);
         continue;
       }
 
-      if (file.size > MAX_IMAGE_SIZE) {
-        rejected.push(`${file.name} (too large)`);
+      if (
+        file.size >
+        MAX_IMAGE_SIZE
+      ) {
+        rejected.push(
+          `${file.name} (too large)`
+        );
         continue;
       }
 
-      valid.push(file);
+      valid.push({
+        file,
+        preview:
+          URL.createObjectURL(
+            file
+          ),
+      });
     }
 
     setImages((current) => {
@@ -1074,18 +1294,36 @@ function SellerPage({
         ...valid,
       ];
 
-      const unique = combined.filter(
-        (file, index, array) =>
-          array.findIndex(
-            (item) =>
-              item.name === file.name &&
-              item.size === file.size &&
-              item.lastModified ===
-                file.lastModified
-          ) === index
-      );
+      const unique =
+        combined.filter(
+          (item, index, array) =>
+            array.findIndex(
+              (other) =>
+                other.file.name ===
+                  item.file.name &&
+                other.file.size ===
+                  item.file.size &&
+                other.file
+                  .lastModified ===
+                  item.file.lastModified
+            ) === index
+        );
 
-      return unique.slice(0, MAX_IMAGES);
+      const finalImages =
+        unique.slice(
+          0,
+          MAX_IMAGES
+        );
+
+      unique
+        .slice(MAX_IMAGES)
+        .forEach((item) =>
+          URL.revokeObjectURL(
+            item.preview
+          )
+        );
+
+      return finalImages;
     });
 
     if (rejected.length) {
@@ -1099,39 +1337,58 @@ function SellerPage({
   };
 
   const selectVideos = (event) => {
-    const selected = Array.from(
-      event.target.files || []
-    );
+    const selected =
+      Array.from(
+        event.target.files || []
+      );
 
     const valid = [];
 
-    for (const file of selected) {
-      if (!file.type.startsWith("video/")) {
+    for (
+      const file of selected
+    ) {
+      if (
+        !file.type.startsWith(
+          "video/"
+        )
+      ) {
         continue;
       }
 
-      if (file.size <= MAX_VIDEO_SIZE) {
+      if (
+        file.size <=
+        MAX_VIDEO_SIZE
+      ) {
         valid.push(file);
       }
     }
 
     setVideos((current) =>
-      [...current, ...valid].slice(
-        0,
-        MAX_VIDEOS
-      )
+      [
+        ...current,
+        ...valid,
+      ].slice(0, MAX_VIDEOS)
     );
 
     event.target.value = "";
   };
 
   const removeImage = (index) => {
-    setImages((current) =>
-      current.filter(
+    setImages((current) => {
+      const item =
+        current[index];
+
+      if (item?.preview) {
+        URL.revokeObjectURL(
+          item.preview
+        );
+      }
+
+      return current.filter(
         (_, itemIndex) =>
           itemIndex !== index
-      )
-    );
+      );
+    });
   };
 
   const removeVideo = (index) => {
@@ -1175,7 +1432,9 @@ function SellerPage({
       return;
     }
 
-    if (!form.description.trim()) {
+    if (
+      !form.description.trim()
+    ) {
       notify(
         "Please describe your item.",
         "error"
@@ -1186,20 +1445,34 @@ function SellerPage({
     setLoading(true);
 
     try {
-      const body = new FormData();
+      const body =
+        new FormData();
 
-      Object.entries(form).forEach(
+      Object.entries(
+        form
+      ).forEach(
         ([key, value]) => {
-          body.append(key, value);
+          body.append(
+            key,
+            value
+          );
         }
       );
 
-      images.forEach((file) => {
-        body.append("images", file);
-      });
+      images.forEach(
+        ({ file }) => {
+          body.append(
+            "images",
+            file
+          );
+        }
+      );
 
       videos.forEach((file) => {
-        body.append("videos", file);
+        body.append(
+          "videos",
+          file
+        );
       });
 
       await api(
@@ -1208,6 +1481,13 @@ function SellerPage({
           method: "POST",
           body,
         }
+      );
+
+      images.forEach(
+        ({ preview }) =>
+          URL.revokeObjectURL(
+            preview
+          )
       );
 
       setForm({
@@ -1236,7 +1516,9 @@ function SellerPage({
         error
       );
 
-      if (error.status === 401) {
+      if (
+        error.status === 401
+      ) {
         clearAuth();
         onLogin();
         return;
@@ -1252,14 +1534,15 @@ function SellerPage({
     }
   };
 
-  if (!user && !getToken()) {
+  if (!user || !getToken()) {
     return (
-      <main className="mx-auto max-w-4xl px-6 py-16">
+      <main className="mx-auto max-w-7xl px-6 py-10">
         <button
           onClick={onBack}
           className="mb-8 flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-orange-500"
         >
-          ← Back to auctions
+          <ArrowLeft size={17} />
+          Back to auctions
         </button>
 
         <div
@@ -1275,7 +1558,8 @@ function SellerPage({
           </h1>
 
           <p className="mt-3 text-gray-500">
-            Sign in before listing your item.
+            Sign in before listing
+            your item.
           </p>
 
           <button
@@ -1295,7 +1579,8 @@ function SellerPage({
         onClick={onBack}
         className="mb-8 flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-orange-500"
       >
-        ← Back to auctions
+        <ArrowLeft size={17} />
+        Back to auctions
       </button>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
@@ -1309,9 +1594,10 @@ function SellerPage({
           </h1>
 
           <p className="mt-3 text-gray-500">
-            Upload photos directly from your phone,
-            provide the details and submit your item
-            for review.
+            Upload photos directly
+            from your phone, provide
+            the details and submit
+            your item for review.
           </p>
 
           <form
@@ -1328,7 +1614,10 @@ function SellerPage({
                 maxLength={150}
                 value={form.title}
                 onChange={(e) =>
-                  update("title", e.target.value)
+                  update(
+                    "title",
+                    e.target.value
+                  )
                 }
                 placeholder="e.g. iPhone 15 Pro Max"
                 className="field"
@@ -1343,7 +1632,9 @@ function SellerPage({
 
                 <input
                   required
-                  value={form.category}
+                  value={
+                    form.category
+                  }
                   onChange={(e) =>
                     update(
                       "category",
@@ -1362,7 +1653,9 @@ function SellerPage({
 
                 <select
                   required
-                  value={form.categoryGroup}
+                  value={
+                    form.categoryGroup
+                  }
                   onChange={(e) =>
                     update(
                       "categoryGroup",
@@ -1375,16 +1668,20 @@ function SellerPage({
                     Select category
                   </option>
 
-                  {CATEGORIES.filter(
-                    (item) => item !== "All"
-                  ).map((item) => (
-                    <option
-                      key={item}
-                      value={item}
-                    >
-                      {item}
-                    </option>
-                  ))}
+                  {CATEGORIES
+                    .filter(
+                      (item) =>
+                        item !==
+                        "All"
+                    )
+                    .map((item) => (
+                      <option
+                        key={item}
+                        value={item}
+                      >
+                        {item}
+                      </option>
+                    ))}
                 </select>
               </div>
             </div>
@@ -1396,7 +1693,9 @@ function SellerPage({
                 </label>
 
                 <input
-                  value={form.condition}
+                  value={
+                    form.condition
+                  }
                   onChange={(e) =>
                     update(
                       "condition",
@@ -1416,7 +1715,9 @@ function SellerPage({
                 <input
                   type="number"
                   min="0"
-                  value={form.expectedPrice}
+                  value={
+                    form.expectedPrice
+                  }
                   onChange={(e) =>
                     update(
                       "expectedPrice",
@@ -1435,7 +1736,9 @@ function SellerPage({
               </label>
 
               <input
-                value={form.location}
+                value={
+                  form.location
+                }
                 onChange={(e) =>
                   update(
                     "location",
@@ -1456,7 +1759,9 @@ function SellerPage({
                 required
                 rows={6}
                 maxLength={5000}
-                value={form.description}
+                value={
+                  form.description
+                }
                 onChange={(e) =>
                   update(
                     "description",
@@ -1468,7 +1773,11 @@ function SellerPage({
               />
 
               <p className="mt-1 text-right text-xs text-gray-400">
-                {form.description.length}/5000
+                {
+                  form.description
+                    .length
+                }
+                /5000
               </p>
             </div>
 
@@ -1487,7 +1796,7 @@ function SellerPage({
                     e.target.value
                   )
                 }
-                placeholder="Anything else the admin or buyer should know?"
+                placeholder="Anything else the admin should know?"
                 className="field resize-none"
               />
             </div>
@@ -1501,14 +1810,16 @@ function SellerPage({
                 </p>
 
                 <span className="text-xs text-gray-400">
-                  {images.length}/{MAX_IMAGES}
+                  {images.length}/
+                  {MAX_IMAGES}
                 </span>
               </div>
 
               <button
                 type="button"
                 disabled={
-                  images.length >= MAX_IMAGES
+                  images.length >=
+                  MAX_IMAGES
                 }
                 onClick={() =>
                   imageInput.current?.click()
@@ -1520,7 +1831,7 @@ function SellerPage({
                 } disabled:opacity-50`}
               >
                 <Upload size={22} />
-                Choose photos from your phone
+                Choose photos
               </button>
 
               <input
@@ -1534,30 +1845,28 @@ function SellerPage({
 
               {images.length > 0 && (
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {images.map((file, index) => {
-                    const previewUrl =
-                      URL.createObjectURL(file);
-
-                    return (
+                  {images.map(
+                    (item, index) => (
                       <div
-                        key={`${file.name}-${file.size}-${index}`}
+                        key={`${item.file.name}-${item.file.size}-${item.file.lastModified}`}
                         className="relative overflow-hidden rounded-xl border"
                       >
                         <img
-                          src={previewUrl}
-                          alt={`Upload ${index + 1}`}
-                          className="aspect-square w-full object-cover"
-                          onLoad={() =>
-                            URL.revokeObjectURL(
-                              previewUrl
-                            )
+                          src={
+                            item.preview
                           }
+                          alt={`Upload ${
+                            index + 1
+                          }`}
+                          className="aspect-square w-full object-cover"
                         />
 
                         <button
                           type="button"
                           onClick={() =>
-                            removeImage(index)
+                            removeImage(
+                              index
+                            )
                           }
                           className="absolute right-2 top-2 rounded-full bg-black/70 p-1.5 text-white"
                         >
@@ -1570,8 +1879,8 @@ function SellerPage({
                           </span>
                         )}
                       </div>
-                    );
-                  })}
+                    )
+                  )}
                 </div>
               )}
             </div>
@@ -1588,14 +1897,16 @@ function SellerPage({
                 </p>
 
                 <span className="text-xs text-gray-400">
-                  {videos.length}/{MAX_VIDEOS}
+                  {videos.length}/
+                  {MAX_VIDEOS}
                 </span>
               </div>
 
               <button
                 type="button"
                 disabled={
-                  videos.length >= MAX_VIDEOS
+                  videos.length >=
+                  MAX_VIDEOS
                 }
                 onClick={() =>
                   videoInput.current?.click()
@@ -1621,41 +1932,52 @@ function SellerPage({
 
               {videos.length > 0 && (
                 <div className="mt-3 space-y-2">
-                  {videos.map((file, index) => (
-                    <div
-                      key={`${file.name}-${file.size}-${index}`}
-                      className={`flex items-center justify-between rounded-xl border p-3 ${
-                        dark
-                          ? "border-slate-800"
-                          : "border-gray-200"
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">
-                          {file.name}
-                        </p>
-
-                        <p className="text-xs text-gray-400">
-                          {(
-                            file.size /
-                            1024 /
-                            1024
-                          ).toFixed(1)}{" "}
-                          MB
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          removeVideo(index)
-                        }
-                        className="rounded-full p-2 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                  {videos.map(
+                    (
+                      file,
+                      index
+                    ) => (
+                      <div
+                        key={`${file.name}-${file.size}-${file.lastModified}`}
+                        className={`flex items-center justify-between rounded-xl border p-3 ${
+                          dark
+                            ? "border-slate-800"
+                            : "border-gray-200"
+                        }`}
                       >
-                        <X size={17} />
-                      </button>
-                    </div>
-                  ))}
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">
+                            {file.name}
+                          </p>
+
+                          <p className="text-xs text-gray-400">
+                            {(
+                              file.size /
+                              1024 /
+                              1024
+                            ).toFixed(
+                              1
+                            )}{" "}
+                            MB
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeVideo(
+                              index
+                            )
+                          }
+                          className="rounded-full p-2 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                        >
+                          <X
+                            size={17}
+                          />
+                        </button>
+                      </div>
+                    )
+                  )}
                 </div>
               )}
             </div>
@@ -1691,8 +2013,12 @@ function SellerPage({
               </h2>
 
               <button
-                onClick={loadRequests}
-                disabled={loadingRequests}
+                onClick={
+                  loadRequests
+                }
+                disabled={
+                  loadingRequests
+                }
                 className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800"
               >
                 <RefreshCw
@@ -1710,66 +2036,78 @@ function SellerPage({
               <div className="mt-8 flex justify-center">
                 <Loader2 className="animate-spin text-orange-500" />
               </div>
-            ) : requests.length === 0 ? (
+            ) : requests.length ===
+              0 ? (
               <div className="mt-8 text-center text-sm text-gray-500">
                 <Package
                   size={35}
                   className="mx-auto mb-3 text-gray-300"
                 />
+
                 No requests yet.
               </div>
             ) : (
               <div className="mt-5 space-y-3">
-                {requests.map((request) => (
-                  <div
-                    key={
-                      request._id ||
-                      request.id
-                    }
-                    className={`rounded-xl border p-4 ${
-                      dark
-                        ? "border-slate-800"
-                        : "border-gray-200"
-                    }`}
-                  >
-                    <p className="font-bold">
-                      {request.title}
-                    </p>
+                {requests.map(
+                  (request) => (
+                    <div
+                      key={
+                        request._id ||
+                        request.id
+                      }
+                      className={`rounded-xl border p-4 ${
+                        dark
+                          ? "border-slate-800"
+                          : "border-gray-200"
+                      }`}
+                    >
+                      <p className="font-bold">
+                        {
+                          request.title
+                        }
+                      </p>
 
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold capitalize text-orange-500">
-                        {String(
-                          request.status ||
-                            "pending"
-                        ).replace(
-                          /_/g,
-                          " "
-                        )}
-                      </span>
-
-                      {request.createdAt && (
-                        <span className="text-[10px] text-gray-400">
-                          {formatDate(
-                            request.createdAt
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold capitalize text-orange-500">
+                          {String(
+                            request.status ||
+                              "pending"
+                          ).replace(
+                            /_/g,
+                            " "
                           )}
                         </span>
+
+                        {request.createdAt && (
+                          <span className="text-[10px] text-gray-400">
+                            {formatDate(
+                              request.createdAt
+                            )}
+                          </span>
+                        )}
+                      </div>
+
+                      {request.rejectionReason && (
+                        <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600">
+                          <b>
+                            Rejected:
+                          </b>{" "}
+                          {
+                            request.rejectionReason
+                          }
+                        </div>
+                      )}
+
+                      {request.adminNotes && (
+                        <div className="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-slate-950">
+                          {
+                            request.adminNotes
+                          }
+                        </div>
                       )}
                     </div>
-
-                    {request.rejectionReason && (
-                      <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600">
-                        <b>Rejected:</b>{" "}
-                        {request.rejectionReason}
-                      </div>
-                    )}
-
-                    {request.adminNotes && (
-                      <div className="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-slate-950">
-                        {request.adminNotes}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  )
+                )}
               </div>
             )}
           </div>
@@ -1803,49 +2141,58 @@ function Navbar({
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <button
-          onClick={() =>
+          onClick={() => {
             window.scrollTo({
               top: 0,
               behavior: "smooth",
-            })
-          }
-          className="flex shrink-0 items-center gap-2"
+            });
+          }}
+          className="flex shrink-0 items-center"
         >
-          <div className="text-left">
-            <h1 className="text-lg font-black sm:text-xl">
-              AUCTION
-              <span className="text-orange-500">
-                BD
-              </span>
-            </h1>
-
-            <p className="hidden text-[10px] tracking-[.25em] text-gray-400 sm:block">
-              BID. WIN. OWN.
-            </p>
-          </div>
+          <span className="text-xl font-black">
+            AUCTION
+            <span className="text-orange-500">
+              BD
+            </span>
+          </span>
         </button>
 
         <nav className="hidden gap-7 md:flex">
           {[
-            ["Auctions", "auctions"],
-            ["Categories", "categories"],
-            ["How It Works", "how"],
-          ].map(([name, id]) => (
-            <button
-              key={id}
-              onClick={() => scrollTo(id)}
-              className="text-sm font-medium text-gray-500 hover:text-orange-500"
-            >
-              {name}
-            </button>
-          ))}
+            [
+              "Auctions",
+              "auctions",
+            ],
+            [
+              "Categories",
+              "categories",
+            ],
+            [
+              "How It Works",
+              "how",
+            ],
+          ].map(
+            ([name, id]) => (
+              <button
+                key={id}
+                onClick={() =>
+                  scrollTo(id)
+                }
+                className="text-sm font-medium text-gray-500 hover:text-orange-500"
+              >
+                {name}
+              </button>
+            )
+          )}
         </nav>
 
         <div className="flex items-center gap-1.5">
           <ThemeButton
             dark={dark}
             onClick={() =>
-              setDark((value) => !value)
+              setDark(
+                (value) => !value
+              )
             }
           />
 
@@ -1897,7 +2244,7 @@ function Navbar({
 }
 
 /* =========================================================
-   HOME
+   HOME PAGE
 ========================================================= */
 
 function HomePage({
@@ -1915,39 +2262,52 @@ function HomePage({
   onSeller,
   dark,
 }) {
-  const filteredAuctions = useMemo(() => {
-    const term = search.trim().toLowerCase();
+  const filteredAuctions =
+    useMemo(() => {
+      const term =
+        search
+          .trim()
+          .toLowerCase();
 
-    return auctions.filter((auction) => {
-      const searchable = [
-        auction.title,
-        auction.category,
-        auction.categoryGroup,
-        auction.description,
-        auction.seller,
-        auction.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      return auctions.filter(
+        (auction) => {
+          const searchable = [
+            auction.title,
+            auction.category,
+            auction.categoryGroup,
+            auction.description,
+            auction.seller,
+            auction.status,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
 
-      const matchesSearch =
-        !term ||
-        searchable.includes(term);
+          const matchesSearch =
+            !term ||
+            searchable.includes(
+              term
+            );
 
-      const matchesCategory =
-        category === "All" ||
-        String(
-          auction.categoryGroup || ""
-        ).toLowerCase() ===
-          category.toLowerCase();
+          const matchesCategory =
+            category === "All" ||
+            String(
+              auction.categoryGroup ||
+                ""
+            ).toLowerCase() ===
+              category.toLowerCase();
 
-      return (
-        matchesSearch &&
-        matchesCategory
+          return (
+            matchesSearch &&
+            matchesCategory
+          );
+        }
       );
-    });
-  }, [auctions, search, category]);
+    }, [
+      auctions,
+      search,
+      category,
+    ]);
 
   const scrollTo = (id) => {
     document
@@ -1960,28 +2320,32 @@ function HomePage({
 
   return (
     <>
-      {/* HERO */}
-
       <section className="mx-auto max-w-7xl px-6 py-16 sm:py-20">
         <div className="max-w-3xl">
           <div className="mb-5 inline-flex rounded-full bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-500">
-            🔥 Live auctions happening now
+            🔥 Live auctions
+            happening now
           </div>
 
           <h2 className="text-5xl font-black tracking-tight sm:text-6xl">
             Find it.
             <br />
+
             <span className="text-orange-500">
               Bid for it.
             </span>
+
             <br />
             Make it yours.
           </h2>
 
           <p className="mt-5 max-w-2xl text-lg leading-8 text-gray-500">
-            Bangladesh&apos;s digital auction
-            marketplace. Discover products,
-            place competitive bids and win.
+            Bangladesh&apos;s
+            digital auction
+            marketplace. Discover
+            products, place
+            competitive bids and
+            win.
           </p>
 
           <button
@@ -1995,8 +2359,6 @@ function HomePage({
           </button>
         </div>
       </section>
-
-      {/* SEARCH */}
 
       <section className="mx-auto max-w-7xl px-6">
         <div
@@ -2015,7 +2377,9 @@ function HomePage({
             <input
               value={search}
               onChange={(e) =>
-                setSearch(e.target.value)
+                setSearch(
+                  e.target.value
+                )
               }
               placeholder="Search auctions..."
               className="w-full bg-transparent py-2 outline-none"
@@ -2051,8 +2415,6 @@ function HomePage({
         </div>
       </section>
 
-      {/* AUCTIONS */}
-
       <section
         id="auctions"
         className="mx-auto max-w-7xl scroll-mt-24 px-6 py-16"
@@ -2062,52 +2424,62 @@ function HomePage({
             Auctions
           </h3>
 
-          {!loading && !error && (
-            <p className="mt-1 text-sm text-gray-500">
-              {filteredAuctions.length} auction
-              {filteredAuctions.length ===
-              1
-                ? ""
-                : "s"}{" "}
-              available
-            </p>
-          )}
+          {!loading &&
+            !error && (
+              <p className="mt-1 text-sm text-gray-500">
+                {
+                  filteredAuctions.length
+                }{" "}
+                auction
+                {filteredAuctions.length ===
+                1
+                  ? ""
+                  : "s"}{" "}
+                available
+              </p>
+            )}
         </div>
 
         {loading && (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {[1, 2, 3, 4].map((id) => (
-              <Skeleton
-                key={id}
-                dark={dark}
+            {[1, 2, 3, 4].map(
+              (id) => (
+                <Skeleton
+                  key={id}
+                  dark={dark}
+                />
+              )
+            )}
+          </div>
+        )}
+
+        {error &&
+          !loading && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-10 text-center">
+              <AlertCircle
+                size={35}
+                className="mx-auto text-red-400"
               />
-            ))}
-          </div>
-        )}
 
-        {error && !loading && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-10 text-center">
-            <AlertCircle
-              size={35}
-              className="mx-auto text-red-400"
-            />
+              <p className="mt-3 text-red-600">
+                {error}
+              </p>
 
-            <p className="mt-3 text-red-600">
-              {error}
-            </p>
-
-            <button
-              onClick={onRefresh}
-              className="mt-5 rounded-lg bg-orange-500 px-5 py-2 font-bold text-white"
-            >
-              Try Again
-            </button>
-          </div>
-        )}
+              <button
+                onClick={
+                  onRefresh
+                }
+                className="mt-5 rounded-lg bg-orange-500 px-5 py-2 font-bold text-white"
+              >
+                Try Again
+              </button>
+            </div>
+          )}
 
         {!loading &&
           !error &&
-          filteredAuctions.length === 0 && (
+          filteredAuctions.length ===
+            0 && (
             <div className="rounded-2xl border border-gray-200 p-12 text-center">
               <Search
                 size={36}
@@ -2119,7 +2491,8 @@ function HomePage({
               </h4>
 
               <p className="mt-2 text-gray-500">
-                Try another search or category.
+                Try another search or
+                category.
               </p>
 
               <button
@@ -2136,7 +2509,8 @@ function HomePage({
 
         {!loading &&
           !error &&
-          filteredAuctions.length > 0 && (
+          filteredAuctions.length >
+            0 && (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {filteredAuctions.map(
                 (auction) => (
@@ -2146,8 +2520,12 @@ function HomePage({
                     favorite={favorites.includes(
                       auction.id
                     )}
-                    onOpen={onOpenAuction}
-                    onFavorite={onFavorite}
+                    onOpen={
+                      onOpenAuction
+                    }
+                    onFavorite={
+                      onFavorite
+                    }
                     dark={dark}
                   />
                 )
@@ -2155,8 +2533,6 @@ function HomePage({
             </div>
           )}
       </section>
-
-      {/* CATEGORIES */}
 
       <section
         id="categories"
@@ -2172,29 +2548,34 @@ function HomePage({
           </h3>
 
           <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-            {CATEGORIES.map((item) => (
-              <button
-                key={item}
-                onClick={() => {
-                  setCategory(item);
-                  scrollTo("auctions");
-                }}
-                className={`rounded-xl border px-4 py-4 font-medium ${
-                  category === item
-                    ? "border-orange-500 bg-orange-500/10 text-orange-500"
-                    : dark
-                    ? "border-slate-700 bg-slate-900 text-slate-300"
-                    : "border-gray-200 bg-white text-gray-700"
-                }`}
-              >
-                {item}
-              </button>
-            ))}
+            {CATEGORIES.map(
+              (item) => (
+                <button
+                  key={item}
+                  onClick={() => {
+                    setCategory(
+                      item
+                    );
+
+                    scrollTo(
+                      "auctions"
+                    );
+                  }}
+                  className={`rounded-xl border px-4 py-4 font-medium ${
+                    category === item
+                      ? "border-orange-500 bg-orange-500/10 text-orange-500"
+                      : dark
+                      ? "border-slate-700 bg-slate-900 text-slate-300"
+                      : "border-gray-200 bg-white text-gray-700"
+                  }`}
+                >
+                  {item}
+                </button>
+              )
+            )}
           </div>
         </div>
       </section>
-
-      {/* HOW IT WORKS */}
 
       <section
         id="how"
@@ -2222,7 +2603,11 @@ function HomePage({
               "Highest valid bidder wins when the auction ends.",
             ],
           ].map(
-            ([Icon, title, description]) => (
+            ([
+              Icon,
+              title,
+              description,
+            ]) => (
               <div
                 key={title}
                 className={`rounded-2xl border p-8 shadow-sm ${
@@ -2240,7 +2625,9 @@ function HomePage({
                 </h4>
 
                 <p className="mt-2 leading-6 text-gray-500">
-                  {description}
+                  {
+                    description
+                  }
                 </p>
               </div>
             )
@@ -2248,18 +2635,19 @@ function HomePage({
         </div>
       </section>
 
-      {/* SELL */}
-
       <section className="mx-auto max-w-7xl px-6 pb-20">
         <div className="rounded-3xl bg-orange-500 p-8 text-white sm:p-10">
           <h3 className="text-3xl font-black">
-            Turn your item into an auction.
+            Turn your item into
+            an auction.
           </h3>
 
           <p className="mt-3 max-w-xl text-white/80">
-            Upload photos directly from your
-            phone, submit your item and let
-            buyers compete for it.
+            Upload photos directly
+            from your phone,
+            submit your item and
+            let buyers compete
+            for it.
           </p>
 
           <button
@@ -2289,12 +2677,12 @@ function Footer({ dark }) {
     >
       <div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 sm:flex-row sm:items-center">
         <div>
-          <div className="text-xl font-black">
+          <p className="text-lg font-black">
             AUCTION
             <span className="text-orange-500">
               BD
             </span>
-          </div>
+          </p>
 
           <p className="mt-1 text-xs text-gray-500">
             BID. WIN. OWN.
@@ -2303,7 +2691,9 @@ function Footer({ dark }) {
 
         <div className="flex flex-wrap gap-5 text-xs text-gray-500">
           <span className="flex items-center gap-1">
-            <ShieldCheck size={14} />
+            <ShieldCheck
+              size={14}
+            />
             Verified
           </span>
 
@@ -2332,52 +2722,81 @@ function Footer({ dark }) {
 ========================================================= */
 
 function App() {
-  const [auctions, setAuctions] = useState([]);
-  const [selectedAuction, setSelectedAuction] =
-    useState(null);
-  const [page, setPage] = useState("home");
-  const [authMode, setAuthMode] = useState(null);
-  const [user, setUser] = useState(getUser);
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [auctions, setAuctions] =
+    useState([]);
 
-  const [favorites, setFavorites] = useState(() =>
-    readStorage(KEYS.favorites, [])
+  const [
+    selectedAuction,
+    setSelectedAuction,
+  ] = useState(null);
+
+  const [page, setPage] =
+    useState("home");
+
+  const [authMode, setAuthMode] =
+    useState(null);
+
+  const [user, setUser] =
+    useState(getUser);
+
+  const [search, setSearch] =
+    useState("");
+
+  const [category, setCategory] =
+    useState("All");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  const [
+    favorites,
+    setFavorites,
+  ] = useState(() =>
+    readStorage(
+      KEYS.favorites,
+      []
+    )
   );
 
-  const [toast, setToast] = useState(null);
+  const [toast, setToast] =
+    useState(null);
 
-  const [dark, setDark] = useState(() => {
-    try {
-      const saved =
-        localStorage.getItem(KEYS.theme);
+  const [dark, setDark] =
+    useState(() => {
+      try {
+        const saved =
+          localStorage.getItem(
+            KEYS.theme
+          );
 
-      if (saved === "dark") {
-        return true;
-      }
+        if (saved === "dark") {
+          return true;
+        }
 
-      if (saved === "light") {
+        if (saved === "light") {
+          return false;
+        }
+
+        return (
+          window.matchMedia?.(
+            "(prefers-color-scheme: dark)"
+          ).matches || false
+        );
+      } catch {
         return false;
       }
+    });
 
-      return (
-        window.matchMedia?.(
-          "(prefers-color-scheme: dark)"
-        ).matches || false
-      );
-    } catch {
-      return false;
-    }
-  });
-
-  /* =======================================================
-     TOAST
-  ======================================================= */
+  /* TOAST */
 
   const notify = useCallback(
-    (message, type = "success") => {
+    (
+      message,
+      type = "success"
+    ) => {
       setToast({
         message,
         type,
@@ -2387,31 +2806,36 @@ function App() {
     []
   );
 
-  /* =======================================================
-     THEME
-  ======================================================= */
+  /* THEME */
 
   useEffect(() => {
     try {
       localStorage.setItem(
         KEYS.theme,
-        dark ? "dark" : "light"
+        dark
+          ? "dark"
+          : "light"
       );
     } catch {}
 
-    document.documentElement.style.colorScheme =
-      dark ? "dark" : "light";
+    document.documentElement.style
+      .colorScheme =
+      dark
+        ? "dark"
+        : "light";
 
     document.body.style.backgroundColor =
-      dark ? "#020617" : "#ffffff";
+      dark
+        ? "#020617"
+        : "#ffffff";
 
     document.body.style.color =
-      dark ? "#f8fafc" : "#111827";
+      dark
+        ? "#f8fafc"
+        : "#111827";
   }, [dark]);
 
-  /* =======================================================
-     FAVORITES
-  ======================================================= */
+  /* FAVORITES */
 
   useEffect(() => {
     try {
@@ -2422,102 +2846,161 @@ function App() {
     } catch {}
   }, [favorites]);
 
-  const toggleFavorite = useCallback(
-    (id) => {
-      setFavorites((current) => {
-        const exists = current.includes(id);
+  const toggleFavorite =
+    useCallback(
+      (id) => {
+        setFavorites(
+          (current) => {
+            const exists =
+              current.includes(id);
 
-        notify(
-          exists
-            ? "Removed from favorites."
-            : "Added to favorites.",
-          "success"
+            notify(
+              exists
+                ? "Removed from favorites."
+                : "Added to favorites.",
+              "success"
+            );
+
+            return exists
+              ? current.filter(
+                  (item) =>
+                    item !== id
+                )
+              : [
+                  ...current,
+                  id,
+                ];
+          }
+        );
+      },
+      [notify]
+    );
+
+  /* LOAD AUCTIONS */
+
+  const loadAuctions =
+    useCallback(async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const data =
+          await api(
+            "/api/auctions?status=all"
+          );
+
+        const list =
+          Array.isArray(data)
+            ? data
+            : Array.isArray(
+                data?.auctions
+              )
+            ? data.auctions
+            : [];
+
+        setAuctions(
+          list.map(
+            normalizeAuction
+          )
+        );
+      } catch (error) {
+        console.error(
+          "Auction loading:",
+          error
         );
 
-        return exists
-          ? current.filter(
-              (item) => item !== id
-            )
-          : [...current, id];
-      });
-    },
-    [notify]
-  );
-
-  /* =======================================================
-     LOAD AUCTIONS
-  ======================================================= */
-
-  const loadAuctions = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const data = await api(
-        "/api/auctions?status=all"
-      );
-
-      const list = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.auctions)
-        ? data.auctions
-        : [];
-
-      setAuctions(
-        list.map(normalizeAuction)
-      );
-    } catch (error) {
-      console.error(
-        "Auction loading:",
-        error
-      );
-
-      setError(
-        error?.message ||
-          "Unable to load auctions."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        setError(
+          error?.message ||
+            "Unable to load auctions."
+        );
+      } finally {
+        setLoading(false);
+      }
+    }, []);
 
   useEffect(() => {
     loadAuctions();
   }, [loadAuctions]);
 
-  /* =======================================================
-     AUTH
-  ======================================================= */
+  /* RESTORE AUTH */
 
-  const handleAuthSuccess = useCallback(
-    (newUser) => {
-      setUser(newUser || getUser());
-      setAuthMode(null);
+  useEffect(() => {
+    const restoreAuth =
+      async () => {
+        if (!getToken()) return;
+
+        try {
+          const data =
+            await api(
+              "/api/auth/me"
+            );
+
+          if (data?.user) {
+            setUser(
+              data.user
+            );
+
+            saveAuth(
+              getToken(),
+              data.user
+            );
+          }
+        } catch (error) {
+          if (
+            error.status === 401
+          ) {
+            clearAuth();
+            setUser(null);
+          }
+        }
+      };
+
+    restoreAuth();
+  }, []);
+
+  /* AUTH */
+
+  const handleAuthSuccess =
+    useCallback(
+      (newUser) => {
+        setUser(
+          newUser ||
+            getUser()
+        );
+
+        setAuthMode(null);
+
+        notify(
+          "You're signed in successfully.",
+          "success"
+        );
+      },
+      [notify]
+    );
+
+  const logout =
+    useCallback(() => {
+      // Backend logout is optional because JWT is stored client-side.
+      api(
+        "/api/auth/logout",
+        {
+          method: "POST",
+        }
+      ).catch(() => {});
+
+      clearAuth();
+
+      setUser(null);
+      setPage("home");
+      setSelectedAuction(null);
 
       notify(
-        "You're signed in successfully.",
+        "You have been signed out.",
         "success"
       );
-    },
-    [notify]
-  );
+    }, [notify]);
 
-  const logout = useCallback(() => {
-    clearAuth();
-
-    setUser(null);
-    setPage("home");
-    setSelectedAuction(null);
-
-    notify(
-      "You have been signed out.",
-      "success"
-    );
-  }, [notify]);
-
-  /* =======================================================
-     NAVIGATION
-  ======================================================= */
+  /* NAVIGATION */
 
   const openSeller = () => {
     if (!getToken()) {
@@ -2543,9 +3026,7 @@ function App() {
       });
   };
 
-  /* =======================================================
-     ADMIN
-  ======================================================= */
+  /* ADMIN */
 
   const adminMode =
     new URLSearchParams(
@@ -2555,15 +3036,16 @@ function App() {
   if (adminMode) {
     return (
       <>
-        <GlobalStyles dark={dark} />
+        <GlobalStyles
+          dark={dark}
+        />
+
         <AdminPanel />
       </>
     );
   }
 
-  /* =======================================================
-     DETAILS
-  ======================================================= */
+  /* DETAILS */
 
   if (selectedAuction) {
     return (
@@ -2574,12 +3056,19 @@ function App() {
             : "bg-white text-gray-900"
         }`}
       >
-        <GlobalStyles dark={dark} />
+        <GlobalStyles
+          dark={dark}
+        />
 
         <AuctionDetails
-          auction={selectedAuction}
+          auction={
+            selectedAuction
+          }
           onBack={() => {
-            setSelectedAuction(null);
+            setSelectedAuction(
+              null
+            );
+
             loadAuctions();
           }}
           onLogin={() =>
@@ -2592,7 +3081,9 @@ function App() {
           <ThemeButton
             dark={dark}
             onClick={() =>
-              setDark((value) => !value)
+              setDark(
+                (value) => !value
+              )
             }
           />
         </div>
@@ -2620,9 +3111,7 @@ function App() {
     );
   }
 
-  /* =======================================================
-     SELLER
-  ======================================================= */
+  /* SELLER */
 
   if (page === "seller") {
     return (
@@ -2633,7 +3122,9 @@ function App() {
             : "bg-white text-gray-900"
         }`}
       >
-        <GlobalStyles dark={dark} />
+        <GlobalStyles
+          dark={dark}
+        />
 
         <header
           className={`sticky top-0 z-40 border-b backdrop-blur ${
@@ -2660,7 +3151,8 @@ function App() {
                 dark={dark}
                 onClick={() =>
                   setDark(
-                    (value) => !value
+                    (value) =>
+                      !value
                   )
                 }
               />
@@ -2669,7 +3161,9 @@ function App() {
                 onClick={logout}
                 className="flex items-center gap-2 text-sm text-gray-500"
               >
-                <LogOut size={17} />
+                <LogOut
+                  size={17}
+                />
 
                 <span className="hidden sm:inline">
                   Logout
@@ -2714,9 +3208,7 @@ function App() {
     );
   }
 
-  /* =======================================================
-     HOME
-  ======================================================= */
+  /* HOME */
 
   return (
     <div
@@ -2726,7 +3218,9 @@ function App() {
           : "bg-white text-gray-900"
       }`}
     >
-      <GlobalStyles dark={dark} />
+      <GlobalStyles
+        dark={dark}
+      />
 
       <Navbar
         user={user}
@@ -2752,16 +3246,22 @@ function App() {
         category={category}
         setCategory={setCategory}
         favorites={favorites}
-        onFavorite={toggleFavorite}
+        onFavorite={
+          toggleFavorite
+        }
         onOpenAuction={
           setSelectedAuction
         }
-        onRefresh={loadAuctions}
+        onRefresh={
+          loadAuctions
+        }
         onSeller={openSeller}
         dark={dark}
       />
 
-      <Footer dark={dark} />
+      <Footer
+        dark={dark}
+      />
 
       {authMode && (
         <AuthModal
